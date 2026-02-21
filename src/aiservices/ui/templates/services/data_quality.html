@@ -1,0 +1,390 @@
+{% extends "base.html" %}
+{% block title %}AI-Allianz Data Quality AI Services{% endblock %}
+
+{% block content %}
+
+<style>
+  .dq-background {
+  width: 100%;
+  min-height: calc(100vh - 120px);
+  background-image: url("{{ url_for('ui.static', filename='images/back.png') }}");
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+
+  background-color: rgba(0, 0, 0, 0.55);
+  background-blend-mode: multiply;
+
+  padding: 40px 0;
+}
+
+  .dq-wrap{
+    max-width:1180px;
+    margin:32px auto 40px;
+    padding:0 24px;
+  }
+
+  .dq-card{
+    background:#020617;
+    border-radius:16px;
+    padding:18px 20px 22px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+    color:#e5e7eb;
+    margin-bottom:16px;
+  }
+
+  .dq-header-card{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+
+  .dq-section-title{
+    margin:0 0 10px 0;
+    font-size:1.2rem;
+    color:#f9fafb;
+  }
+
+  .dq-h1{
+    margin:0 0 10px;
+    text-align:center;
+    font-size:2rem;
+    color:#f9fafb;
+  }
+
+  .pill{
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
+    background:#111827;
+    padding:6px 14px;
+    border-radius:999px;
+    margin-right:8px;
+    color:#e5e7eb;
+    font-size:.9rem;
+  }
+  .pill.active{
+    background-image:linear-gradient(90deg,#5b21ff,#ec38c5);
+    color:#fff;
+  }
+
+  .muted{color:#9ca3af;font-size:.9rem;}
+  .error-box{
+    background:#7f1d1d;
+    color:#fecaca;
+    border-radius:10px;
+    padding:10px 12px;
+    margin-bottom:16px;
+  }
+
+  .dq-toolbar{
+    display:flex;
+    gap:8px;
+    justify-content:flex-end;
+  }
+
+  /* Inputs ------------------------------------------------------------ */
+  .dq-label{
+    font-weight:600;
+    margin:6px 0;
+    font-size:.9rem;
+  }
+
+  .dq-input,
+  .dq-select{
+    width:100%;
+    padding:8px 10px;
+    border-radius:8px;
+    border:1px solid #4b5563;
+    background:#020617;
+    color:#f9fafb;
+  }
+
+  .dq-upload-preview{
+    overflow:auto;
+    max-height:320px;
+    border:1px solid #1f2937;
+    border-radius:10px;
+    padding:6px;
+    background:#020617;
+  }
+
+  .dq-row{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+
+  /* Buttons  ------------------------------- */
+  .btn-primary{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:8px 18px;
+    border-radius:999px;
+    border:none;
+    cursor:pointer;
+    background-image:linear-gradient(90deg,#5b21ff,#ec38c5);
+    color:#fff;
+    font-weight:600;
+    text-decoration:none;
+    font-size:.9rem;
+  }
+  .btn-primary:hover{filter:brightness(1.05);}
+
+  .btn-ghost{
+    padding:8px 16px;
+    border-radius:999px;
+    border:1px solid #4b5563;
+    background:transparent;
+    color:#e5e7eb;
+    cursor:pointer;
+    font-size:.9rem;
+    text-decoration:none;
+  }
+  .btn-ghost:hover{background:#1f2937;}
+  .btn-ghost[disabled]{opacity:.4;cursor:not-allowed;}
+
+  /* Result previews ---------------------------------------------------- */
+  .dq-table-wrap{
+    overflow:auto;
+    max-height:300px;
+    border:1px solid #1f2937;
+    border-radius:10px;
+    padding:6px;
+    background:#020617;
+  }
+
+  .dq-status-card{
+    margin-top:12px;
+    border-radius:10px;
+    padding:10px 12px;
+    font-size:.9rem;
+  }
+  .dq-status-success{
+    background:#022c22;
+    border:1px solid #16a34a;
+    color:#bbf7d0;
+  }
+  .dq-status-error{
+    background:#450a0a;
+    border:1px solid #f97373;
+    color:#fecaca;
+  }
+
+  @media (max-width:768px){
+    .dq-row{grid-template-columns:1fr;}
+    .dq-toolbar{flex-direction:column;align-items:flex-end;}
+  }
+</style>
+
+<section class="dq-background">
+  <div class="dq-wrap">
+
+
+  <h1 class="dq-h1">AI-Allianz Data Quality AI Services</h1>
+
+  {% if error %}
+    <div class="error-box"><strong>Error:</strong> {{ error }}</div>
+  {% endif %}
+
+  <!-- Progress + Wizard Controls ---------------------------------------->
+  <div class="dq-card dq-header-card">
+    <div>
+      <span class="pill {% if step == 0 %}active{% endif %}">1 · Upload</span>
+      <span class="pill {% if step == 1 %}active{% endif %}">2 · Options</span>
+      <span class="pill {% if step == 2 %}active{% endif %}">3 · Results</span>
+    </div>
+    <div class="dq-toolbar">
+      <form method="post" action="{{ url_for('ui.data_quality_back') }}">
+        <button class="btn-primary" {% if step == 0 %}disabled{% endif %}>← Back</button>
+      </form>
+      <form method="post" action="{{ url_for('ui.data_quality_next') }}">
+        <button class="btn-primary" {% if step == 2 %}disabled{% endif %}>Next →</button>
+      </form>
+      <form method="post" action="{{ url_for('ui.data_quality_reset') }}">
+        <button class="btn-primary">Start New Upload</button>
+      </form>
+    </div>
+  </div>
+
+  {# ---------------- Step 0: Upload ---------------- #}
+  {% if step == 0 %}
+  <div class="dq-card">
+    <h2 class="dq-section-title">Upload Data</h2>
+    <p class="muted">
+      Upload a CSV/XLSX table. We’ll infer feature types, impute missing values,
+      detect anomalies, and show a personalized summary for a chosen target.
+    </p>
+    <form action="{{ url_for('ui.data_quality_upload') }}"
+          method="post" enctype="multipart/form-data">
+      <label class="dq-label">Dataset file</label>
+      <input class="dq-input" type="file" name="data_file"
+             accept=".csv,.xlsx,.xls" required>
+      <div style="margin-top:12px">
+        <button class="btn-primary" type="submit">Upload</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {# ---------------- Step 1: Options / Preview ---------------- #}
+  {% if step == 1 %}
+  <div class="dq-card">
+    <h2 class="dq-section-title">Preview &amp; Options</h2>
+    {% if df_preview %}
+      <div class="dq-upload-preview">
+        {{ df_preview|safe }}
+      </div>
+    {% endif %}
+
+    <form action="{{ url_for('ui.data_quality_run') }}"
+          method="post" style="margin-top:16px">
+      <div class="dq-row">
+        <div>
+          <label class="dq-label">Select the target variable (optional)</label>
+          <select class="dq-select" name="target_col">
+            <option value="">-- none --</option>
+            {% for c in columns %}
+              <option value="{{ c }}"
+                {% if target and target==c %}selected{% endif %}>
+                {{ c }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="dq-label">Imputation strategy</label>
+          <select class="dq-select" name="strategy">
+            <option value="mean">Mean (numeric)</option>
+            <option value="median">Median (numeric)</option>
+            <option value="most_frequent">Most frequent</option>
+            <option value="constant">Constant (0 / empty)</option>
+          </select>
+          <p class="muted" style="margin:6px 0 0">
+            Used only for the “Imputation” step.
+          </p>
+        </div>
+      </div>
+      <div style="margin-top:12px">
+        <button class="btn-primary" type="submit">Process</button>
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {# ---------------- Step 2: Results ---------------- #}
+  {% if step == 2 %}
+  <div class="dq-card">
+    <h2 class="dq-section-title">Results</h2>
+
+    <h3 class="dq-section-title">1) Feature Type Inference</h3>
+    {% if fti_err %}<div class="error-box">{{ fti_err }}</div>{% endif %}
+    {% if fti_preview %}
+      <div class="dq-table-wrap">{{ fti_preview|safe }}</div>
+      <p style="margin-top:8px">
+        <a class="btn-primary"
+           href="{{ url_for('ui.data_quality_download', kind='fti', fmt='csv') }}">
+          Download CSV
+        </a>
+        <a class="btn-primary"
+           href="{{ url_for('ui.data_quality_download', kind='fti', fmt='xlsx') }}">
+          Download XLSX
+        </a>
+      </p>
+    {% else %}
+      <p class="muted">No FTI output.</p>
+    {% endif %}
+
+    <h3 class="dq-section-title">2) Imputation</h3>
+    {% if imp_err %}<div class="error-box">{{ imp_err }}</div>{% endif %}
+    {% if imp_preview %}
+      <div class="dq-table-wrap">{{ imp_preview|safe }}</div>
+      {% if imp_info %}
+        <p class="muted" style="margin-top:6px">Imputation info:</p>
+        <ul class="muted">
+          {% for line in imp_info %}<li>{{ line }}</li>{% endfor %}
+        </ul>
+      {% endif %}
+      <p style="margin-top:8px">
+        <a class="btn-primary"
+           href="{{ url_for('ui.data_quality_download', kind='imputed', fmt='csv') }}">
+          Download CSV
+        </a>
+        <a class="btn-primary"
+           href="{{ url_for('ui.data_quality_download', kind='imputed', fmt='xlsx') }}">
+          Download XLSX
+        </a>
+      </p>
+    {% else %}
+      <p class="muted">No imputed output.</p>
+    {% endif %}
+
+    <h3 class="dq-section-title">3) Anomaly Detection</h3>
+    {% if anom_err %}<div class="error-box">{{ anom_err }}</div>{% endif %}
+    {% if anom_preview %}
+      {% if anom_threshold %}<p class="muted">{{ anom_threshold }}</p>{% endif %}
+      <div class="dq-table-wrap">{{ anom_preview|safe }}</div>
+      <p style="margin-top:8px">
+        <a class="btn-primary"
+           href="{{ url_for('ui.data_quality_download', kind='anomaly', fmt='csv') }}">
+          Download CSV
+        </a>
+        <a class="btn-primary"
+           href="{{ url_for('ui.data_quality_download', kind='anomaly', fmt='xlsx') }}">
+          Download XLSX
+        </a>
+      </p>
+    {% else %}
+      <p class="muted">No anomaly output.</p>
+    {% endif %}
+
+    <h3 class="dq-section-title">4) Personalized (Target) Summary</h3>
+    {% if target %}<p class="muted">Target: <strong>{{ target }}</strong></p>{% endif %}
+    {% if pers_msg %}<p class="muted">{{ pers_msg }}</p>{% endif %}
+    {% if pers_preview %}
+      <div class="dq-table-wrap">{{ pers_preview|safe }}</div>
+    {% endif %}
+
+    {# ---- Publish status --------------------------------------------- #}
+    {% if publish_info %}
+      <div class="dq-status-card dq-status-success">
+        <strong>Published ✅</strong><br>
+        {% if publish_info.artifact_url %}
+          Artifact:
+          <a href="{{ publish_info.artifact_url }}" target="_blank" rel="noopener">
+            download link
+          </a><br>
+        {% endif %}
+        {% if publish_info.dataset_id %}
+          Dataset ID / Location: {{ publish_info.dataset_id }}
+        {% endif %}
+      </div>
+    {% elif publish_err %}
+      <div class="dq-status-card dq-status-error">
+        <strong>Publish failed:</strong> {{ publish_err }}
+      </div>
+    {% endif %}
+  </div>
+
+  <!-- Bottom toolbar (same as top) -->
+  <div class="dq-card dq-header-card" style="justify-content:flex-end">
+    <div class="dq-toolbar">
+      <form method="post" action="{{ url_for('ui.data_quality_back') }}">
+        <button class="btn-primary" {% if step == 0 %}disabled{% endif %}>← Back</button>
+      </form>
+      <form method="post" action="{{ url_for('ui.data_quality_next') }}">
+        <button class="btn-primary" {% if step == 2 %}disabled{% endif %}>Next →</button>
+      </form>
+      <form method="post" action="{{ url_for('ui.data_quality_reset') }}">
+        <button class="btn-primary">Start New Upload</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+</section>
+
+{% endblock %}

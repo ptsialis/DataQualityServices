@@ -1,0 +1,21 @@
+
+
+[ui]
+# Hide the top-right hamburger menu (dev options)
+hideTopBar = true
+# Hide sidebar navigation menu
+
+
+[browser]
+# Disable usage statistics being sent to Streamlit
+gatherUsageStats = false
+
+[server]
+# Prevent automatic rerun when saving code
+runOnSave = false
+fileWatcherType = "none"
+
+[theme]
+# Optional: Set a light theme (you can change to "dark" if you prefer)
+base = "light"
+

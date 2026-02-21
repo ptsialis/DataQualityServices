@@ -1,0 +1,31 @@
+seed = 42
+mode = "production" # options: "development", "production"
+
+# paths (docker)
+root = "/app"
+dataset_root = "/app/datasets"
+weights_root = "/app/model_weights"
+
+[similarity_component]
+model_name = "VGG19"
+available_base_datasets = [
+    "miniimagenet",
+]
+similarity_measure = "kl_div" # options: 'euclidean', 'cosine', 'emd', 'kl_div'
+sim_gamma = 1 # options: 1, 0.1
+threshold = 0.9 # this is a similarity threshold, so similar datasets have a similarity above this value
+
+[labelling_component]
+num_episodes = 200 # options: 200, 250
+temperature = 1 # options: 1, 0.1
+fine_tune_epochs = 10
+default_base_model_type = "feat" # options: 'vgg19', 'resnet18', 'resnet50'
+default_weights_file_name = "model_feat_dataset_cub.pth"
+
+[labelling_component.available_models.miniimagenet]
+weights_file_name = "model_vgg19_dataset_miniimagenet.pth"
+model_type = "vgg19"
+
+[labelling_component.available_models.cub]
+weights_file_name = "model_feat_dataset_cub.pth"
+model_type = "feat"

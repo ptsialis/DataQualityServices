@@ -1,0 +1,370 @@
+{% extends "base.html" %}
+{% block title %}Outlier Detection (Tabular) · KI-Allianz AI Services{% endblock %}
+
+{% block content %}
+<style>
+  /* ===== Outer hero-style wrapper with wallpaper ======================= */
+  .outlier-hero{
+    min-height: calc(100vh - 120px);         /* fill screen under header   */
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 60px 24px 80px;
+    background:
+      #000
+      url("{{ url_for('ui.static', filename='images/back.png') }}")
+      center / cover no-repeat;
+  }
+
+  /* ===== Existing layout for the card ================================= */
+  .outlier-section{
+    max-width:1180px;
+    width: 100%;
+    margin:0 auto;
+  }
+  .outlier-title{
+    font-size:1.9rem;
+    margin:0 0 18px;
+    color:#f9fafb;
+  }
+  .outlier-card{
+    background:#111827;
+    border-radius:16px;
+    padding:18px 18px 22px;
+    box-shadow:0 10px 30px rgba(0,0,0,.35);
+    color:#e5e7eb;
+  }
+  .outlier-card h2{
+    margin-top:0;
+    margin-bottom:10px;
+    font-size:1.2rem;
+    color:#f9fafb;
+  }
+  .status-row{
+    display:grid;
+    grid-template-columns:1fr;
+    gap:6px;
+    margin-bottom:14px;
+  }
+  .status-pill{
+    padding:6px 10px;
+    border-radius:8px;
+    font-size:.9rem;
+  }
+  .status-ok{
+    background:#dcfce7;
+    color:#166534;
+  }
+  .status-missing{
+    background:#fee2e2;
+    color:#b91c1c;
+  }
+  .outlier-error{
+    margin:12px 0;
+    padding:10px 12px;
+    border-radius:8px;
+    background:#7f1d1d;
+    color:#fecaca;
+  }
+  .outlier-form{
+    display:grid;
+    gap:10px;
+    margin-top:8px;
+  }
+  .outlier-form-row{
+    display:grid;
+    grid-template-columns:1.1fr 1.3fr;
+    gap:10px;
+    align-items:center;
+  }
+  .outlier-label{
+    font-size:.9rem;
+    color:#e5e7eb;
+  }
+  .outlier-input,
+  .outlier-file{
+    width:100%;
+    padding:8px 10px;
+    border-radius:8px;
+    border:1px solid #4b5563;
+    background:#020617;
+    color:#f9fafb;
+  }
+  .outlier-checkbox-row{
+    display:flex;
+    gap:10px;
+    align-items:center;
+    font-size:.88rem;
+  }
+  .outlier-actions{
+    margin-top:12px;
+    display:flex;
+    gap:10px;
+  }
+  .btn-primary{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    padding:8px 18px;
+    border-radius:999px;
+    border:none;
+    cursor:pointer;
+    background-image:linear-gradient(90deg,#5b21ff,#ec38c5);
+    color:#fff;
+    font-weight:600;
+    text-decoration:none;
+    font-size:.9rem;
+  }
+  .btn-primary:hover{
+    filter:brightness(1.05);
+  }
+  .btn-ghost{
+    padding:8px 16px;
+    border-radius:999px;
+    border:1px solid #4b5563;
+    background:transparent;
+    color:#e5e7eb;
+    cursor:pointer;
+    font-size:.9rem;
+    text-decoration:none;
+  }
+  .btn-ghost:hover{
+    background:#1f2937;
+  }
+
+  /* results area */
+  .outlier-results{
+    margin-top:18px;
+  }
+  .outlier-results h3{
+    margin:0 0 8px;
+    font-size:1.05rem;
+  }
+  .outlier-meta{
+    font-size:.9rem;
+    color:#d1d5db;
+    margin-bottom:8px;
+  }
+  .outlier-downloads{
+    display:flex;
+    flex-wrap:wrap;
+    gap:8px;
+    margin:10px 0 4px;
+  }
+  .outlier-table-wrapper{
+    margin-top:8px;
+    max-height:380px;
+    overflow:auto;
+    border-radius:10px;
+    border:1px solid #374151;
+  }
+  .outlier-table-wrapper table{
+    width:100%;
+    border-collapse:collapse;
+    font-size:.86rem;
+    color:#e5e7eb;
+    background:#020617;
+  }
+  .outlier-table-wrapper th{
+    background:#000;
+    color:#fff;
+    position:sticky;
+    top:0;
+  }
+  .outlier-table-wrapper td,
+  .outlier-table-wrapper th{
+    padding:4px 6px;
+    border-bottom:1px solid #1f2937;
+  }
+  .outlier-info-list{
+    margin:4px 0 0;
+    padding-left:18px;
+    font-size:.85rem;
+    color:#d1d5db;
+  }
+
+  @media (max-width:768px){
+    .outlier-form-row{
+      grid-template-columns:1fr;
+    }
+    .outlier-actions{
+      flex-direction:column;
+      align-items:flex-start;
+    }
+  }
+</style>
+
+<section class="outlier-hero">
+  <div class="outlier-section">
+    <h1 class="outlier-title">
+      AI Alliance – Tabular Outlier Detection using Extreme Boosting Based Outlier Detection (XGBOD)
+    </h1>
+
+    <h2 class="outlier-subtitle">
+      Welcome to the AI Alliance Tabular Outlier Detection User Interface
+    </h2>
+
+    <p class="outlier-description">
+      Data acquired from literature is not always plausible. In the study of intrinsic
+      properties of permanent magnets, there are mismatches in the values of properties.
+      For example, there are different saturation magnetization (Ms) values for a specific
+      magnetic composition. Here, an outlier detection model has been trained to detect
+      anomalous Ms values in a dataset of permanent magnet alloys. To work with this
+      service, please upload an Excel/CSV dataset. The app aligns features to the model’s
+      training schema, scales, scores, applies a tuned threshold, and returns your table
+      with one extra column: <strong>detected outliers</strong>.
+    </p>
+  </div>
+</section>
+
+    {% if error %}
+      <div class="outlier-error">{{ error }}</div>
+    {% endif %}
+
+    <div class="outlier-card">
+      <h2>Upload your data</h2>
+
+      {# ------- Artifact status row ------------------------------------- #}
+      {% set a = artifacts or {} %}
+      <div class="status-row">
+        <div class="status-pill {{ 'status-ok' if a.model else 'status-missing' }}">
+          Model {{ 'loaded' if a.model else 'missing' }}
+        </div>
+        <div class="status-pill {{ 'status-ok' if a.scaler else 'status-missing' }}">
+          Scaler {{ 'loaded' if a.scaler else 'missing' }}
+        </div>
+        <div class="status-pill {{ 'status-ok' if a.threshold is not none else 'status-missing' }}">
+          Threshold {{ 'loaded' if a.threshold is not none else 'missing' }}
+        </div>
+        <div class="status-pill {{ 'status-ok' if a.features else 'status-missing' }}">
+          Features {{ 'loaded' if a.features else 'missing' }}
+        </div>
+      </div>
+
+      {% if not ready %}
+        <div class="outlier-error">
+          Model artifacts are missing. Put them in <code>./artifacts</code> or set
+          <code>XGBOD_ARTIFACTS_DIR</code>.
+        </div>
+      {% endif %}
+
+      {# ==================== STEP: upload form ========================= #}
+      {% if step == "upload" %}
+        <form class="outlier-form"
+              action="{{ url_for('ui.outlier_process') }}"
+              method="post"
+              enctype="multipart/form-data">
+
+          <div class="outlier-form-row">
+            <label class="outlier-label">Data file (.csv / .xlsx)</label>
+            <input class="outlier-file"
+                   type="file"
+                   name="data_file"
+                   accept=".csv,.xlsx,.xls"
+                   required>
+          </div>
+
+          <div class="outlier-form-row">
+            <label class="outlier-label">Excel sheet name (optional)</label>
+            <input class="outlier-input"
+                   type="text"
+                   name="sheet_name"
+                   placeholder="e.g. Tabelle1">
+          </div>
+
+          <div class="outlier-form-row">
+            <label class="outlier-label">Fill value for missing/NaN features</label>
+            <input class="outlier-input"
+                   type="number"
+                   step="any"
+                   name="fill_value"
+                   value="0">
+          </div>
+
+          <div class="outlier-checkbox-row">
+            <input type="checkbox" id="strict_schema" name="strict_schema" value="1">
+            <label for="strict_schema" class="outlier-label">
+              Strict schema (error if features missing/non-numeric)
+            </label>
+          </div>
+
+          <div class="outlier-checkbox-row">
+            <input type="checkbox" id="coerce_numeric" name="coerce_numeric" value="1" checked>
+            <label for="coerce_numeric" class="outlier-label">
+              Coerce non-numeric to numeric (NaN → fill)
+            </label>
+          </div>
+
+          <div class="outlier-checkbox-row">
+            <input type="checkbox" id="include_score" name="include_score" value="1">
+            <label for="include_score" class="outlier-label">
+              Also include raw outlier score column (<code>od_score</code>)
+            </label>
+          </div>
+
+          <div class="outlier-actions">
+            <button type="submit" class="btn-primary">Process</button>
+            <a href="{{ url_for('ui.index') }}" class="btn-primary">Back to overview</a>
+          </div>
+        </form>
+      {% endif %}
+{# ==================== STEP: results ============================= #}
+{% if step == "results" %}
+  <div class="outlier-results">
+    <h3>Detection results</h3>
+
+    <div class="outlier-meta">
+      Threshold: <strong>{{ thr }}</strong> ·
+      Rows: <strong>{{ rows }}</strong> ·
+      Detected outliers: <strong>{{ n_out }}</strong>
+    </div>
+
+    {% if info_msgs %}
+      <ul class="outlier-info-list">
+        {% for m in info_msgs %}
+          <li>{{ m }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <div class="outlier-downloads">
+      <a class="btn-primary"
+         href="{{ url_for('ui.outlier_download', what='results.csv') }}">Results CSV</a>
+      <a class="btn-primary"
+         href="{{ url_for('ui.outlier_download', what='results.xlsx') }}">Results XLSX</a>
+      <a class="btn-primary"
+         href="{{ url_for('ui.outlier_download', what='inliers.csv') }}">Inliers CSV</a>
+      <a class="btn-primary"
+         href="{{ url_for('ui.outlier_download', what='outliers.csv') }}">Outliers CSV</a>
+    </div>
+
+    {# -------- Outliers -------- #}
+    {% if outliers_preview_html %}
+      <div class="results-pane">
+        <h4 class="results-title">Outliers</h4>
+        <div class="table-wrap">
+          {{ outliers_preview_html | safe }}
+        </div>
+      </div>
+    {% endif %}
+
+    {# -------- Inliers -------- #}
+    {% if inliers_preview_html %}
+      <div class="results-pane">
+        <h4 class="results-title">Inliers</h4>
+        <div class="table-wrap">
+          {{ inliers_preview_html | safe }}
+        </div>
+      </div>
+    {% endif %}
+
+    <div class="outlier-actions" style="margin-top:12px;">
+      <a href="{{ url_for('ui.outlier_page') }}" class="btn-primary">Start new upload</a>
+      <a href="{{ url_for('ui.index') }}" class="btn-primary">Back to overview</a>
+    </div>
+  </div>
+{% endif %}
+</div>
+</section>
+{% endblock %}
+

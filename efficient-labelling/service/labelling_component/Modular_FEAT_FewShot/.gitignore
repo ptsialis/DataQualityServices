@@ -1,0 +1,69 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Environment files
+.env
+.venv/
+venv/
+ENV/
+env.bak/
+env/
+
+# Checkpoints and model weights
+checkpoints/*
+!checkpoints/.gitkeep
+*.pth
+*.pt
+*.ckpt
+
+# Logs, outputs, and diagnostics
+*.log
+*.csv
+*.txt
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.svg
+*.out
+*.npy
+*.npz
+results/
+output/
+logs/
+runs/
+*.json
+
+# Inference outputs
+results*/
+Prediction/
+
+# Dataset folders (optional - only if not versioning data)
+*.zip
+*.tar
+*.tar.gz
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+*.ipynb
+
+# System files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# PyTorch Lightning or WandB
+lightning_logs/
+wandb/

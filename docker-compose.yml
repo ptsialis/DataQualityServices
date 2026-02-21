@@ -1,0 +1,129 @@
+#Its a docker-compose.xml file
+
+# #Its for local build
+# services:
+#   ai-services:
+#     build: .
+#     image: ai-services:prod
+#     container_name: ai-services
+#     ports: ["8000:8000"]
+#     env_file: .env
+#     volumes:
+#       - ./artifacts:/app/artifacts:ro
+#       - ./output:/app/output
+#     restart: unless-stopped
+#     healthcheck:
+#       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8000/health"]
+#       interval: 30s
+#       timeout: 5s
+#       retries: 3
+#     logging:
+#       driver: "json-file"
+#       options:
+#         max-size: "10m"
+#         max-file: "3"
+#   efficient-labelling:
+#     build:  
+#       context: ./efficient-labelling     
+#       dockerfile: Dockerfile
+#     image: ai_services_production_v1-efficient-labelling:latest
+#     container_name: efficient-labelling
+#     env_file: .env              
+#     ports:
+#       - "8501:8501"                
+    
+#     working_dir: /app
+#     command: ["streamlit", "run", "gui/app.py", "--server.address=0.0.0.0"]
+        
+#     environment:
+#       PYTHONUNBUFFERED: "1"
+#     restart: unless-stopped
+
+#   image-deblurring:
+#     build:  
+#       context: ./image-deblurring     
+#       dockerfile: Dockerfile
+#     image: ai_services_production_v1-image-deblurring:latest
+#     container_name: image-deblurring
+#     env_file: .env             
+#     ports:
+#       - "8502:8502"                  
+    
+#     working_dir: /app
+#     command: ["streamlit", "run", "app.py", "--server.address=0.0.0.0","--server.port=8502"]
+    
+#     environment:
+#       PYTHONUNBUFFERED: "1"
+#     restart: unless-stopped
+
+#   dataquality-aiservices:
+#     build:
+#       context: ./dataquality-aiservices
+#       dockerfile: Dockerfile
+#     image: ai_services_production_v1-dataquality-aiservices:latest
+#     container_name: dataquality-aiservices
+#     env_file: .env
+#     ports:
+#       - "8503:8503"
+#     volumes:
+#       - ./dataquality-aiservices/data:/app/data
+#       - ./dataquality-aiservices/assets:/app/assets
+#       - ./output:/app/output
+#     working_dir: /app
+#     command: ["streamlit", "run", "streamlit_auto.py", "--server.address=0.0.0.0", "--server.port=8503"]
+#     restart: unless-stopped
+
+# networks:
+#   default:
+#     name: ai_services_production_v1_default
+
+#Its for production build
+
+services:
+  ai-services:
+    image: optimus-repo.hlrs.de/repository/kiallianz/ai/ai-services:1.0.0
+    container_name: ai-services
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./artifacts:/app/artifacts:ro
+      - ./output:/app/output
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  efficient-labelling:
+    image: optimus-repo.hlrs.de/repository/kiallianz/ai/efficient-labelling:1.0.0
+    container_name: efficient-labelling
+    env_file: .env
+    ports:
+      - "8501:8501"
+    restart: unless-stopped
+
+  image-deblurring:
+    image: optimus-repo.hlrs.de/repository/kiallianz/ai/image-deblurring:1.0.0
+    container_name: image-deblurring
+    env_file: .env
+    ports:
+      - "8502:8502"
+    restart: unless-stopped
+
+  dataquality-aiservices:
+    image: optimus-repo.hlrs.de/repository/kiallianz/ai/dataquality-aiservices:1.0.0
+    container_name: dataquality-aiservices
+    env_file: .env
+    ports:
+      - "8503:8503"
+    volumes:
+      - ./dataquality-aiservices/data:/app/data
+      - ./dataquality-aiservices/assets:/app/assets
+      - ./output:/app/output
+    restart: unless-stopped
+
+networks:
+  default:
+    name: ai_services_production_v1_default

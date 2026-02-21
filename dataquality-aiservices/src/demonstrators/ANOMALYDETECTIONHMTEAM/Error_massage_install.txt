@@ -1,0 +1,26 @@
+(BA_env) PS C:\Users\t-poe\Documents\Studium\Wintersemester 2024-25\Bachleorarbeit\Bachelor_Projekt\Demonstrator_BA\src> pip install pydantic
+
+Collecting pydantic
+  Downloading pydantic-2.10.3-py3-none-any.whl.metadata (172 kB)
+Collecting annotated-types>=0.6.0 (from pydantic)
+  Downloading annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+Collecting pydantic-core==2.27.1 (from pydantic)
+  Downloading pydantic_core-2.27.1-cp310-none-win_amd64.whl.metadata (6.7 kB)
+Collecting typing-extensions>=4.12.2 (from pydantic)
+  Using cached typing_extensions-4.12.2-py3-none-any.whl.metadata (3.0 kB)
+Downloading pydantic-2.10.3-py3-none-any.whl (456 kB)
+Downloading pydantic_core-2.27.1-cp310-none-win_amd64.whl (2.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 7.8 MB/s eta 0:00:00
+Downloading annotated_types-0.7.0-py3-none-any.whl (13 kB)
+Using cached typing_extensions-4.12.2-py3-none-any.whl (37 kB)
+Installing collected packages: typing-extensions, annotated-types, pydantic-core, pydantic
+  Attempting uninstall: typing-extensions
+    Found existing installation: typing_extensions 4.11.0
+    Uninstalling typing_extensions-4.11.0:
+      Successfully uninstalled typing_extensions-4.11.0
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed. This behaviour is the source of th
+e following dependency conflicts.
+tensorflow 2.10.0 requires libclang>=13.0.0, which is not installed.
+tensorflow 2.10.0 requires tensorflow-io-gcs-filesystem>=0.23.1, which is not installed.
+tensorflow 2.10.0 requires protobuf<3.20,>=3.9.2, but you have protobuf 3.20.3 which is incompatible.
+Successfully installed annotated-types-0.7.0 pydantic-2.10.3 pydantic-core-2.27.1 typing-extensions-4.12.2

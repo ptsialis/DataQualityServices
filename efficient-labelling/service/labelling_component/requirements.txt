@@ -1,0 +1,18 @@
+# Core Requirements
+torch==2.3.0
+torchvision==0.18.0
+numpy==1.26.4
+pandas==2.2.2
+Pillow==10.3.0
+tqdm==4.66.4
+scikit-learn==1.4.2
+matplotlib==3.8.4
+seaborn==0.13.2
+
+# Additional Utilities
+argparse==1.4.0
+logging==0.4.9.6
+scipy==1.13.0  
+joblib==1.4.0  
+
+# installation command: pip install -r requirements.txt

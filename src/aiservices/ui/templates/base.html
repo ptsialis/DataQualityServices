@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}KI-Allianz AI Services{% endblock %}</title>
+
+    <!-- Global KI-Allianz style -->
+    <link rel="stylesheet"
+          href="{{ url_for('ui.static', filename='styles.css') }}">
+  </head>
+  <body>
+    <div class="page-shell">
+
+      <!-- Top black strip + rounded light header like ki-allianz.de -->
+      <header class="header-shell">
+        <div class="main-header">
+          <!-- Logo -->
+          <a href="{{ url_for('ui.index') }}" class="logo">
+            <img src="{{ url_for('ui.static', filename='images/logo.svg') }}"
+                 alt="KI-Allianz Logo">
+          </a>
+
+          <!-- Navigation -->
+          <nav class="nav">
+            <a class="nav-link"
+               href="{{ url_for('ui.index') }}#services">Services</a>
+            <a class="nav-link"
+               href="{{ url_for('ui.goto_catalogues') }}" target="_blank" rel="noopener">Dataplatform</a>
+            <a class="nav-link"
+               href="{{ url_for('ui.index') }}">Home</a>
+          </nav>
+        </div>
+      </header>
+
+      <main class="page-main">
+        {% block content %}{% endblock %}
+      </main>
+
+      <footer class="page-footer">
+        <p>© 2024 KI-Allianz Baden-Württemberg · AI Services Demo</p>
+      </footer>
+    </div>
+  </body>
+</html>

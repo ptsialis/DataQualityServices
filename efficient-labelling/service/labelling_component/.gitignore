@@ -1,0 +1,9 @@
+# Ignore folders inside feat_inference
+feat_inference/data/
+feat_inference/Labelled_Data/
+
+# Optional ignores
+__pycache__/
+*.pyc
+*.log
+.DS_Store
