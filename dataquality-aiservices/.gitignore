@@ -10,6 +10,9 @@ __pycache__/
 *.csv
 *.pt
 *.pkl
+*.pkl
+!dictionaryName.pkl
+!dictionarySample.pkl
 
 # Distribution / packaging
 .Python
