@@ -154,7 +154,6 @@ Apache License 2.0
 | Name | Affiliation |
 |------|-------------|
 | **Bhuvneshwar Bajpeyee** | AI Services Development & Integration Ownership | Aalen University |
-| **Miroslav** | Hosting & infrastructure support |
 | **Petros Tsialis & Albert Agisha** | DataQuality Services Owner | Aalen University |
 | **Dima Al-Obaidi & Felix Gerschner** | Efficient Labelling Service Owner | Aalen University |
 | **Niloofar Kalashtari** | Outlier Detection Service Owner | Aalen University |
