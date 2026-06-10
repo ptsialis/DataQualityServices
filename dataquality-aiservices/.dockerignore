@@ -1,0 +1,7 @@
+FE/node_modules
+BE/__pycache__
+BE/.venv
+BE/**/*.pyc
+.git
+.env
+

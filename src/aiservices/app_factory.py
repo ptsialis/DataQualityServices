@@ -14,10 +14,13 @@ def create_app() -> Flask:
         load_dotenv(override=False)
     app = Flask(__name__)
 
-    # Session secret (used by Flask for cookies/CSRF, even without auth)
-    secret = app.config.get("SECRET_KEY") or "change-me-in-prod"
+    # Session secret used by Flask to sign cookies.
+    # Do not start the application without an explicitly configured secret.
+    secret = os.getenv("SECRET_KEY")
+
     if not secret:
-            raise RuntimeError("SECRET_KEY is missing in environment")
+        raise RuntimeError("SECRET_KEY is missing in environment")
+
     app.secret_key = secret
 
     # Prod-ish cookie defaults; flip SECURE=False only when testing over http
