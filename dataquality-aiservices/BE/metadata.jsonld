@@ -1,0 +1,144 @@
+{
+    "@context": "https://schema.org/",
+    "@type": "Dataset",
+    "@id": "http://example.org/dataset/1234",
+    "name": "Mock Dataset",
+    "description": "This is a mock dataset generated from metadata.",
+    "keywords": [
+        "chess",
+        "game",
+        "metadata"
+    ],
+    "creator": {
+        "@type": "Organization",
+        "name": "Mock Organization",
+        "url": "http://example.org"
+    },
+    "dateCreated": "2025-03-06T14:06:08.347490",
+    "dateModified": "2025-03-06T14:06:08.347490",
+    "license": "https://creativecommons.org/licenses/by/4.0/",
+    "distribution": {
+        "@type": "DataDownload",
+        "contentUrl": "http://example.org/download/mock_data.csv",
+        "encodingFormat": "text/csv"
+    },
+    "variables": [
+        {
+            "@type": "PropertyValue",
+            "name": NaN,
+            "totalValues": NaN,
+            "missingValues": NaN,
+            "uniqueValues": NaN,
+            "mean": NaN,
+            "standardDeviation": NaN
+        },
+        {
+            "@type": "PropertyValue",
+            "name": NaN,
+            "totalValues": NaN,
+            "missingValues": NaN,
+            "uniqueValues": NaN,
+            "mean": NaN,
+            "standardDeviation": NaN
+        },
+        {
+            "@type": "PropertyValue",
+            "name": NaN,
+            "totalValues": NaN,
+            "missingValues": NaN,
+            "uniqueValues": NaN,
+            "mean": NaN,
+            "standardDeviation": NaN
+        },
+        {
+            "@type": "PropertyValue",
+            "name": NaN,
+            "totalValues": NaN,
+            "missingValues": NaN,
+            "uniqueValues": NaN,
+            "mean": NaN,
+            "standardDeviation": NaN
+        },
+        {
+            "@type": "PropertyValue",
+            "name": NaN,
+            "totalValues": NaN,
+            "missingValues": NaN,
+            "uniqueValues": NaN,
+            "mean": NaN,
+            "standardDeviation": NaN
+        },
+        {
+            "@type": "PropertyValue",
+            "name": NaN,
+            "totalValues": NaN,
+            "missingValues": NaN,
+            "uniqueValues": NaN,
+            "mean": NaN,
+            "standardDeviation": NaN
+        },
+        {
+            "@type": "PropertyValue",
+            "name": "game",
+            "totalValues": 500.0,
+            "missingValues": 0.0,
+            "uniqueValues": 500.0,
+            "mean": 14258.94,
+            "standardDeviation": NaN
+        },
+        {
+            "@type": "PropertyValue",
+            "name": "white_king_col",
+            "totalValues": 500.0,
+            "missingValues": 0.0,
+            "uniqueValues": 4.0,
+            "mean": 14258.94,
+            "standardDeviation": 0.0
+        },
+        {
+            "@type": "PropertyValue",
+            "name": "white_king_row",
+            "totalValues": 500.0,
+            "missingValues": 0.0,
+            "uniqueValues": 4.0,
+            "mean": 14258.94,
+            "standardDeviation": 0.0
+        },
+        {
+            "@type": "PropertyValue",
+            "name": "white_rook_col",
+            "totalValues": 500.0,
+            "missingValues": 0.0,
+            "uniqueValues": 8.0,
+            "mean": 14258.94,
+            "standardDeviation": 0.0
+        },
+        {
+            "@type": "PropertyValue",
+            "name": "white_rook_row",
+            "totalValues": 500.0,
+            "missingValues": 0.0,
+            "uniqueValues": 8.0,
+            "mean": 4.456,
+            "standardDeviation": NaN
+        },
+        {
+            "@type": "PropertyValue",
+            "name": "black_king_col",
+            "totalValues": 500.0,
+            "missingValues": 252.0,
+            "uniqueValues": 8.0,
+            "mean": 4.456,
+            "standardDeviation": 0.0
+        },
+        {
+            "@type": "PropertyValue",
+            "name": "black_king_row",
+            "totalValues": 500.0,
+            "missingValues": 0.0,
+            "uniqueValues": 8.0,
+            "mean": 4.384,
+            "standardDeviation": NaN
+        }
+    ]
+}

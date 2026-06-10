@@ -1,0 +1,16 @@
+Docker Push Befehl
+docker push apreisler/ba-base:latest
+docker push apreisler/ba-frontend:latest
+docker push apreisler/ba-backend:latest
+
+//Docker Base Build
+docker build -t apreisler/ba-base:latest -f Dockerfile.base .
+
+Docker Build Befehle
+docker compose build frontend
+docker compose build backend
+
+
+//Conda Start Commands
+conda activate notebook
+jupyter lab

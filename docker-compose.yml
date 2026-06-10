@@ -78,7 +78,8 @@
 #     name: ai_services_production_v1_default
 
 #Its for production build
-
+include:
+  - ./dataquality-aiservices/docker-compose.yml
 services:
   ai-services:
     image: optimus-repo.hlrs.de/repository/kiallianz/ai/ai-services:1.0.0
@@ -112,17 +113,7 @@ services:
       - "8502:8502"
     restart: unless-stopped
 
-  dataquality-aiservices:
-    image: optimus-repo.hlrs.de/repository/kiallianz/ai/dataquality-aiservices:1.0.0
-    container_name: dataquality-aiservices
-    env_file: .env
-    ports:
-      - "8503:8503"
-    volumes:
-      - ./dataquality-aiservices/data:/app/data
-      - ./dataquality-aiservices/assets:/app/assets
-      - ./output:/app/output
-    restart: unless-stopped
+
 
 networks:
   default:

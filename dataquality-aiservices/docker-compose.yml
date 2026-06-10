@@ -1,0 +1,36 @@
+services:
+  backend:
+    build:
+      context: .	
+      dockerfile: BE/Dockerfile
+    container_name: dataquality-backend
+    ports:
+      - "5000:5000"
+    environment:
+      FLASK_ENV: "development"
+      NVIDIA_VISIBLE_DEVICES: "all"
+      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
+      SECRET_KEY: "${SECRET_KEY:?Add SECRET_KEY to the root .env file}"
+      CORS_ORIGINS: "http://localhost:8503"
+      SESSION_COOKIE_SECURE: "false"
+      SESSION_FILE_DIR: "/tmp/flask_sessions"
+      SESSION_DATA_PATH: "/tmp/session_data"
+    gpus:
+      - driver: nvidia
+        count: all
+        capabilities:
+          - gpu
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./FE
+      dockerfile: Dockerfile
+    container_name: dataquality-frontend
+    ports:
+      - "8503:5173"
+    environment:
+      DOCKER: "true"
+    depends_on:
+      - backend
+    restart: unless-stopped

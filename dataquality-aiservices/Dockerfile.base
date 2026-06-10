@@ -1,0 +1,49 @@
+FROM continuumio/miniconda3:24.3.0-0
+
+# Install Python 3.11
+RUN conda install -y python=3.11 && conda clean -afy
+
+ENV PATH=/opt/conda/bin:$PATH
+WORKDIR /app
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install base Python dependencies
+COPY requirements-base.txt .
+
+RUN /opt/conda/bin/python -m pip install --upgrade "pip<25" "setuptools<70" wheel
+RUN /opt/conda/bin/python -m pip install --no-cache-dir -r requirements-base.txt
+
+# ─────────────── NLTK SETUP ───────────────
+
+# NLTK data directory
+ENV NLTK_DATA=/usr/local/share/nltk_data
+RUN mkdir -p /usr/local/share/nltk_data
+
+# Download punkt, punkt_tab, stopwords
+RUN /opt/conda/bin/python - <<'PY'
+import nltk
+download_dir = "/usr/local/share/nltk_data"
+print("Downloading punkt, punkt_tab and stopwords into", download_dir)
+for pkg in ("punkt", "punkt_tab", "stopwords"):
+    try:
+        nltk.download(pkg, download_dir=download_dir)
+        print(f"Downloaded {pkg}")
+    except Exception as e:
+        print(f"Failed to download {pkg}:", e)
+PY
+
+#NLTK 3.8+ expects pickle files in a PY3/ subfolder
+RUN mkdir -p /usr/local/share/nltk_data/tokenizers/punkt/PY3 && \
+    cp /usr/local/share/nltk_data/tokenizers/punkt/*.pickle \
+       /usr/local/share/nltk_data/tokenizers/punkt/PY3/ || true
+
+# ──────────────────────────────────────────
+
+ENV PYTHONUNBUFFERED=1
+
+CMD ["python"]
