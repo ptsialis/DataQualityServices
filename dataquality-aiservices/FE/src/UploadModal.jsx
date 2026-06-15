@@ -50,10 +50,10 @@ function UploadModal({
     const reader = new FileReader();
     reader.onload = (event) => {
       const text = event.target.result;
-      const lines = text.trim().split('\n');
-      const headers = lines[0].split(',');
+      const lines = text.trim().split(/\r?\n/);
+      const headers = lines[0].split(',').map((header) => header.trim());
       const data = lines.slice(1).map((line) => {
-        const values = line.split(',');
+        const values = line.split(',').map((value) => value.trim());
         return headers.reduce((acc, header, idx) => {
           acc[header] = values[idx] || '';
           return acc;
@@ -70,6 +70,11 @@ function UploadModal({
 
   //Angepasst Test SL
   const handleSubmit = async () => {
+    if (!selectedFile || !localTarget) {
+      alert("Bitte Datei und Zielvariable auswählen.");
+      return;
+    }
+
     setIsLoading(true);
     setUploadedFile(selectedFile);
     setColumns(localColumns);
@@ -90,7 +95,14 @@ function UploadModal({
         body: formData
       });
 
-      const result = await response.json();
+      const responseText = await response.text();
+      let result = {};
+
+      try {
+        result = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        result = { error: responseText || "Ungültige Server-Antwort." };
+      }
 
       if (!response.ok) {
         alert("Fehler beim Upload: " + (result?.error || "Unbekannter Fehler"));
@@ -98,10 +110,11 @@ function UploadModal({
         return;
       }
 
-      onSubmit(result); // weitergeben an App.jsx
+      await onSubmit(result); // weitergeben an App.jsx
 
     } catch (error) {
       alert("Beim Hochladen der Datei ist ein Fehler aufgetreten:\n" + error.message);
+    } finally {
       setIsLoading(false);
     }
   };

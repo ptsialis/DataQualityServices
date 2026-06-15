@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import Sidebar from './Sidebar';
 import UploadModal from './UploadModal';
@@ -9,6 +9,8 @@ function App() {
   const { t, i18n } = useTranslation();
 
   const [jsonResponse, setJsonResponse] = useState(null);
+  const inFlightUrlRef = useRef("");
+  const hasUploadedRef = useRef(false);
   const [operationTouched, setOperationTouched] = useState(false);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [showUploadModal, setShowUploadModal] = useState(false);
@@ -75,7 +77,7 @@ function App() {
       }
 
 
-      const res = await fetch("http://localhost:5000/downloadZip", {
+      const res = await fetch("/downloadZip", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -182,7 +184,7 @@ function App() {
         return;
       }
 
-      const res = await fetch("http://localhost:5000/model", {
+      const res = await fetch("/model", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -253,7 +255,7 @@ function App() {
         payload.num_trials = 20;
       }
 
-      const res = await fetch("http://localhost:5000/model", {
+      const res = await fetch("/model", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -326,15 +328,42 @@ function App() {
 
   //Cache im Frontend löschen
   useEffect(() => {
+    const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
     const reset = async () => {
       try {
-        await fetch("http://localhost:5000/reset", {
-          method: "POST",
-          credentials: "include",
-        });
+        let lastError = null;
+
+        for (let attempt = 1; attempt <= 10; attempt += 1) {
+          try {
+            const response = await fetch("/reset", {
+              method: "POST",
+              credentials: "include",
+            });
+
+            if (response.ok) {
+              lastError = null;
+              break;
+            }
+
+            lastError = new Error(`/reset failed with HTTP ${response.status}`);
+          } catch (error) {
+            lastError = error;
+          }
+
+          await wait(1000);
+        }
+
+        if (lastError) {
+          throw lastError;
+        }
       } catch (e) {
         console.error("Session reset failed:", e);
       } finally {
+        if (hasUploadedRef.current) {
+          return;
+        }
+
         setJsonResponse(null);
         setSelectedOperation(null);
         setActiveTabs({});
@@ -350,15 +379,6 @@ function App() {
     reset();
   }, []);
 
-
-  useEffect(() => {
-    // Clear cached jsonResponse when a new upload completes to ensure fresh data is loaded
-    if (uploadSuccess && selectedOperation) {
-      setJsonResponse(null);
-    }
-  }, [uploadSuccess]);
-
-
   useEffect(() => {
     // nur laden, wenn Downloads gewählt UND ein Upload stattgefunden hat
     if (selectedOperation !== "downloads") return;
@@ -370,7 +390,7 @@ function App() {
 
     (async () => {
       try {
-        const res = await fetch("http://localhost:5000/cleaned", {
+        const res = await fetch("/cleaned", {
           method: "GET",
           credentials: "include",
         });
@@ -378,7 +398,7 @@ function App() {
         const data = await res.json();
 
         setOriginalTable(data?.original ?? null);
-        setProcessedTable(data?.final ?? null);
+        setProcessedTable(data?.final ?? data?.processed ?? null);
       } catch (err) {
         console.error("Fehler beim Laden der Tabellen-Preview (/cleaned):", err);
         setOriginalTable(null);
@@ -397,16 +417,24 @@ function App() {
       return;
     }
 
-    if (tabOptions[operation]?.length > 0) {
-      setJsonResponse(null);
-
-      return;
+    const defaultTab = tabOptions[operation]?.[0];
+    if (defaultTab) {
+      setActiveTabs((prev) => ({ ...prev, [operation]: defaultTab }));
     }
 
     if (operation === "ReportRoutes" || operation === "ReportOverall") return;
 
     try {
-      const res = await fetch(`http://localhost:5000/${operation}`, {
+      const url = operation === "datagraphs" && defaultTab
+        ? `/datagraphs?sub=${encodeURIComponent(defaultTab)}`
+        : `/${operation}`;
+
+      if (inFlightUrlRef.current === url) {
+        return;
+      }
+      inFlightUrlRef.current = url;
+
+      const res = await fetch(url, {
         method: "GET",
         credentials: "include",
       });
@@ -415,6 +443,8 @@ function App() {
     } catch (err) {
       console.error(`Fehler bei API-Aufruf für /${operation}:`, err);
       setJsonResponse({ error: "Fehler beim Laden der Daten." });
+    } finally {
+      inFlightUrlRef.current = "";
     }
   };
 
@@ -450,7 +480,7 @@ function App() {
   useEffect(() => {
     const fetchCounts = async () => {
       try {
-        const res = await fetch("http://localhost:5000/detectedCounts", {
+        const res = await fetch("/detectedCounts", {
           method: "GET",
           credentials: "include",
         });
@@ -469,6 +499,23 @@ function App() {
   if ((jsonResponse?.dataframe?.data?.length || 0) > 0) {
     availableOptions.push('all');
   }
+
+  const translatePlotLabels = (labels, translations) => (
+    Array.isArray(labels)
+      ? labels.map((label) => translations[label] || label)
+      : labels
+  );
+
+  const isMissingValue = (value) => (
+    value === null || value === undefined || Number.isNaN(value)
+  );
+
+  const wasCellImputed = (rowIdx, columnKey) => {
+    const originalValue = jsonResponse?.original?.data?.[rowIdx]?.[columnKey];
+    const imputedValue = jsonResponse?.imputed?.data?.[rowIdx]?.[columnKey];
+
+    return isMissingValue(originalValue) && !isMissingValue(imputedValue);
+  };
 
   return (
     <div className="app-container">
@@ -504,8 +551,13 @@ function App() {
 
           const url =
             parentKey === "datagraphs"
-              ? `http://localhost:5000/datagraphs?sub=${encodeURIComponent(subKey)}`
-              : `http://localhost:5000/${parentKey}`;
+              ? `/datagraphs?sub=${encodeURIComponent(subKey)}`
+              : `/${parentKey}`;
+
+          if (inFlightUrlRef.current === url) {
+            return;
+          }
+          inFlightUrlRef.current = url;
 
           try {
             const res = await fetch(url, { method: "GET", credentials: "include" });
@@ -514,6 +566,8 @@ function App() {
           } catch (err) {
             console.error(`Fehler bei API-Aufruf für ${url}:`, err);
             setJsonResponse({ error: "Fehler beim Laden der Daten." });
+          } finally {
+            inFlightUrlRef.current = "";
           }
         }}
 
@@ -560,21 +614,38 @@ function App() {
           show={showUploadModal}
           onClose={() => setShowUploadModal(false)}
           onSubmit={async () => {
+            hasUploadedRef.current = true;
             setShowUploadModal(false);
             setUploadSuccess(true);
             setSelectedOperation("original");
-            setJsonResponse(null);
+            setActiveTabs((prev) => ({ ...prev, original: "rawData" }));
+            inFlightUrlRef.current = "/original";
 
             try {
-              const res = await fetch("http://localhost:5000/detectedCounts", {
+              const originalRes = await fetch("/original", {
                 method: "GET",
                 credentials: "include",
               });
+              if (!originalRes.ok) {
+                throw new Error(`/original failed with HTTP ${originalRes.status}`);
+              }
+              const originalData = await originalRes.json();
+              setJsonResponse(originalData);
+              inFlightUrlRef.current = "";
+
+              const res = await fetch("/detectedCounts", {
+                method: "GET",
+                credentials: "include",
+              });
+              if (!res.ok) {
+                throw new Error(`/detectedCounts failed with HTTP ${res.status}`);
+              }
               const data = await res.json();
               setDetectedCounts(data && Object.keys(data).length ? data : null);
             } catch (err) {
-              console.error("Fehler beim Laden von /detectedCounts:", err);
-              setDetectedCounts(null);
+              console.error("Fehler beim Laden nach dem Upload:", err);
+              inFlightUrlRef.current = "";
+              setDetectedCounts((prev) => prev ?? {});
             }
           }}
           setUploadedFile={setUploadedFile}
@@ -936,10 +1007,10 @@ function App() {
                                 <button
                                   type="button"
                                   className="report-download-button"
-                                  disabled={!modelDownloadUrl}
-                                  onClick={() => {
-                                    window.location.href = `http://localhost:5000${modelDownloadUrl}`;
-                                  }}
+	                                  disabled={!modelDownloadUrl}
+	                                  onClick={() => {
+	                                    window.location.href = modelDownloadUrl;
+	                                  }}
                                 >
                                   Download
                                 </button>
@@ -1236,6 +1307,14 @@ function App() {
           </div>
         )}
 
+        {selectedOperation === 'original' && activeTabs.original === 'rawData' && !(jsonResponse?.dataframe?.data?.length > 0) && (
+          <div className="summary-plot-section">
+            <div className="table-wrapper">
+              <p>Keine Rohdaten geladen. Bitte den Datensatz erneut auswählen oder den Tab erneut öffnen.</p>
+            </div>
+          </div>
+        )}
+
         {selectedOperation === 'original' && activeTabs.original === 'seeStatistics' && jsonResponse && (
           <div className="summary-plot-section">
             {jsonResponse.description?.data?.length > 0 && (
@@ -1468,7 +1547,12 @@ function App() {
                       <tr key={rowIdx}>
                         <td>{rowIdx + 1}</td>
                         {jsonResponse.imputed.columns.map((key, idx) => (
-                          <td key={idx}>{row[key]?.toString() ?? '-'}</td>
+                          <td
+                            key={idx}
+                            className={wasCellImputed(rowIdx, key) ? 'highlight-imputed-cell' : undefined}
+                          >
+                            {row[key]?.toString() ?? '-'}
+                          </td>
                         ))}
                       </tr>
                     ))}
@@ -1501,7 +1585,12 @@ function App() {
                         <tr key={rowIdx}>
                           <td>{rowIdx + 1}</td>
                           {jsonResponse.imputed.columns.map((key, idx) => (
-                            <td key={idx}>{row[key]?.toString() ?? '-'}</td>
+                            <td
+                              key={idx}
+                              className={wasCellImputed(rowIdx, key) ? 'highlight-imputed-cell' : undefined}
+                            >
+                              {row[key]?.toString() ?? '-'}
+                            </td>
                           ))}
                         </tr>
                       ))}
@@ -1657,7 +1746,7 @@ function App() {
             <div className="plots-grid">
               {/* Inference Plot */}
               <div className="plot-wrapper">
-                <h3 className="plot-title">Inference Plot</h3>
+                <h3 className="plot-title">{t('summaryInferenceTitle')}</h3>
                 <div
                   style={{
                     width: '100%',
@@ -1695,6 +1784,15 @@ function App() {
                     })}
                     layout={{
                       ...jsonResponse.inference.layout,
+                      title: '',
+                      xaxis: {
+                        ...(jsonResponse.inference.layout?.xaxis || {}),
+                        title: { text: t('featureType') },
+                      },
+                      yaxis: {
+                        ...(jsonResponse.inference.layout?.yaxis || {}),
+                        title: { text: t('count') },
+                      },
                       margin: {
                         l: 100,
                         r: 100,
@@ -1714,7 +1812,7 @@ function App() {
               {/* Anomaly Pie Chart */}
               {jsonResponse.anomaly?.data && (
                 <div className="plot-wrapper">
-                  <h3 className="plot-title">Anomalie-Verteilung</h3>
+                  <h3 className="plot-title">{t('summaryAnomalyTitle')}</h3>
                   <div
                     style={{
                       width: '100%',
@@ -1742,7 +1840,13 @@ function App() {
 
                         return {
                           ...trace,
-                          labels: typeof trace.labels === 'string' ? parseArray(trace.labels) : trace.labels,
+                          labels: translatePlotLabels(
+                            typeof trace.labels === 'string' ? parseArray(trace.labels) : trace.labels,
+                            {
+                              Anomaly: t('anomalyLabel'),
+                              'No Anomaly': t('noAnomalyLabel'),
+                            }
+                          ),
                           values: typeof trace.values === 'string' ? parseArray(trace.values) : trace.values,
                           marker: {
                             ...trace.marker,
@@ -1751,7 +1855,8 @@ function App() {
                         };
                       })}
                       layout={{
-                        ...jsonResponse.inference.layout,
+                        ...jsonResponse.anomaly.layout,
+                        title: '',
                         margin: {
                           l: 100,
                           r: 100,
@@ -1772,7 +1877,7 @@ function App() {
               {/* Personal Features Plot */}
               {jsonResponse.personal?.data && (
                 <div className="plot-wrapper">
-                  <h3 className="plot-title">Personalisierte Merkmale</h3>
+                  <h3 className="plot-title">{t('summaryPersonalTitle')}</h3>
                   <div
                     style={{
                       width: '100%',
@@ -1800,7 +1905,13 @@ function App() {
 
                         return {
                           ...trace,
-                          labels: typeof trace.labels === 'string' ? parseArray(trace.labels) : trace.labels,
+                          labels: translatePlotLabels(
+                            typeof trace.labels === 'string' ? parseArray(trace.labels) : trace.labels,
+                            {
+                              'Personal Features': t('personalFeaturesLabel'),
+                              'Non-Personal Features': t('nonPersonalFeaturesLabel'),
+                            }
+                          ),
                           values: typeof trace.values === 'string' ? parseArray(trace.values) : trace.values,
                           marker: {
                             ...trace.marker,
@@ -1809,7 +1920,8 @@ function App() {
                         };
                       })}
                       layout={{
-                        ...jsonResponse.inference.layout,
+                        ...jsonResponse.personal.layout,
+                        title: '',
                         margin: {
                           l: 100,
                           r: 100,
@@ -1827,10 +1939,10 @@ function App() {
                 </div>
               )}
 
-              {/* Imputation Histogram */}
+              {/* Imputation Pie Chart */}
               {jsonResponse.imputation?.data && (
                 <div className="plot-wrapper">
-                  <h3 className="plot-title">Imputation Histogramm</h3>
+                  <h3 className="plot-title">{t('summaryImputationTitle')}</h3>
                   <div
                     style={{
                       width: '100%',
@@ -1859,16 +1971,23 @@ function App() {
 
                         return {
                           ...trace,
-                          x: typeof trace.x === 'string' ? parseArray(trace.x) : trace.x,
-                          y: typeof trace.y === 'string' ? parseArray(trace.y) : trace.y,
+                          labels: translatePlotLabels(
+                            typeof trace.labels === 'string' ? parseArray(trace.labels) : trace.labels,
+                            {
+                              'Imputed Values': t('imputedValuesLabel'),
+                              'Not Imputed Values': t('notImputedValuesLabel'),
+                            }
+                          ),
+                          values: typeof trace.values === 'string' ? parseArray(trace.values) : trace.values,
                           marker: {
                             ...trace.marker,
-                            color: histColors[index % histColors.length]
+                            colors: histColors
                           }
                         };
                       })}
                       layout={{
-                        ...jsonResponse.inference.layout,
+                        ...jsonResponse.imputation.layout,
+                        title: '',
                         margin: {
                           l: 100,
                           r: 100,

@@ -12,6 +12,29 @@ Nach dem Start ist das Projekt im Browser unter folgender Adresse erreichbar:
 http://localhost:5173/
 
 
+Docker auf macOS und Linux:
+
+Standardstart, auch für macOS/Apple Silicon:
+"docker compose up --build"
+
+Die Standard-Konfiguration nutzt weiterhin linux/amd64, damit die Python/ML-Abhängigkeiten auf macOS stabil laufen. Auf Linux-x86_64 ist das ebenfalls die native Plattform. Nur wenn bewusst eine andere Architektur benötigt wird, kann "DOCKER_PLATFORM" überschrieben werden.
+
+Linux mit NVIDIA-GPU:
+
+Voraussetzungen auf dem Host:
+- NVIDIA-Treiber installiert
+- NVIDIA Container Toolkit installiert
+- "nvidia-smi" funktioniert auf dem Host
+
+Start mit GPU-Zugriff:
+"docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build"
+
+Nach dem Start kann geprüft werden, ob die GPU im Backend sichtbar ist:
+"curl http://localhost:8503/status"
+
+In der Antwort sollte "gpu.cuda_available" auf true stehen und mindestens ein Gerätename unter "gpu.device_names" erscheinen. Die LLM- und PyTorch-basierten Anomaly-Detection-Pfade verwenden dann automatisch CUDA, wenn PyTorch die GPU sieht.
+
+
 Projekt nach Änderungen neu bauen:
 
 Wenn Änderungen am Projekt vorgenommen wurden, müssen die betroffenen Container neu gebaut werden.

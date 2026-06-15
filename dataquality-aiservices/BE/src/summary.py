@@ -200,6 +200,9 @@ def explanation_imputation(df_explain_imp,df_inference):
     col_name= []
 
     columns_missing_values =df_explain_imp.columns[df_explain_imp.isnull().any()].tolist()
+    if not columns_missing_values:
+        return "In deinem Datensatz wurden keine fehlenden Werte erkannt. Es musste daher nichts imputiert werden."
+
     missing_df_mask= df_explain_imp[columns_missing_values]
     for i, col in enumerate(missing_df_mask.columns):
         
@@ -216,11 +219,12 @@ def explanation_imputation(df_explain_imp,df_inference):
     for i in range(len(col_name)):
         
         row = df_inference[df_inference['Attribute_name'] == col_name[i]]
-        if row["prediction"].iloc[0]=="numeric":
-            column_type= ["mean",row["prediction"].iloc[0]]
+        inferred_type = row["prediction"].iloc[0] if not row.empty else "unknown"
+        if inferred_type=="numeric":
+            column_type= ["mean", inferred_type]
         else:
 
-            column_type= ["mode",row["prediction"].iloc[0]]
+            column_type= ["mode", inferred_type]
         stat_for_colummns= f" • Spalte {col_name[i]} enthält insgesamt {stat_missing_values_absolut[i]} fehlende Werte, was {stat_missing_values_relative[i]} % aller Werte entspricht. Da diese Spalte {column_type[1]} ist, wurde sie mit dem {column_type[0]} imputiert. "
         list_with_explanation.append(stat_for_colummns)
 

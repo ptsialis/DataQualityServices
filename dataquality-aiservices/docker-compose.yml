@@ -1,28 +1,32 @@
 services:
   backend:
+    # Apple Silicon can keep the emulated amd64 image with the default.
+    # Linux x86_64 hosts use the same platform natively.
+    # Override DOCKER_PLATFORM only if you intentionally need a different arch.
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     build:
-      context: .	
+      context: .
       dockerfile: BE/Dockerfile
     container_name: dataquality-backend
-    ports:
-      - "5000:5000"
+
     environment:
       FLASK_ENV: "development"
-      NVIDIA_VISIBLE_DEVICES: "all"
-      NVIDIA_DRIVER_CAPABILITIES: "compute,utility"
       SECRET_KEY: "${SECRET_KEY:?Add SECRET_KEY to the root .env file}"
       CORS_ORIGINS: "http://localhost:8503"
       SESSION_COOKIE_SECURE: "false"
       SESSION_FILE_DIR: "/tmp/flask_sessions"
       SESSION_DATA_PATH: "/tmp/session_data"
-    gpus:
-      - driver: nvidia
-        count: all
-        capabilities:
-          - gpu
+      LOG_LEVEL: "INFO"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/status', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 20s
     restart: unless-stopped
 
   frontend:
+    platform: ${DOCKER_PLATFORM:-linux/amd64}
     build:
       context: ./FE
       dockerfile: Dockerfile
@@ -32,5 +36,6 @@ services:
     environment:
       DOCKER: "true"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped

@@ -3,13 +3,25 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 import pickle
-import dgl
-from dgl.nn import GATConv
+try:
+	import dgl
+	from dgl.nn import GATConv
+except Exception as e:
+	dgl = None
+	GATConv = None
+	_DGL_IMPORT_ERROR = e
 from torch.nn import TransformerEncoder
 from torch.nn import TransformerDecoder
 from .dlutils import *
 from .constants import *
 torch.manual_seed(1)
+
+def require_dgl():
+	if dgl is None or GATConv is None:
+		raise RuntimeError(
+			"DGL could not be imported. Install a DGL build that matches the installed PyTorch version "
+			"before using the MTAD_GAT or GDN models."
+		) from _DGL_IMPORT_ERROR
 
 ## Separate LSTM for each variable
 class LSTM_Univariate(nn.Module):
@@ -258,6 +270,7 @@ class CAE_M(nn.Module):
 class MTAD_GAT(nn.Module):
 	def __init__(self, feats):
 		super(MTAD_GAT, self).__init__()
+		require_dgl()
 		self.name = 'MTAD_GAT'
 		self.lr = 0.0001
 		self.n_feats = feats
@@ -286,6 +299,7 @@ class MTAD_GAT(nn.Module):
 class GDN(nn.Module):
 	def __init__(self, feats):
 		super(GDN, self).__init__()
+		require_dgl()
 		self.name = 'GDN'
 		self.lr = 0.0001
 		self.n_feats = feats
@@ -645,4 +659,3 @@ class TranAD3(nn.Module):
         x2 = self.fcn(self.transformer_decoder2(tgt, memory))
 
         return x1, x2
-

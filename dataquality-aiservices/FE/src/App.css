@@ -414,6 +414,11 @@ input[type="file"] {
   color: rgb(0, 0, 0); 
 }
 
+.highlight-imputed-cell {
+  background-color: #bf91e5ff !important;
+  color: rgb(0, 0, 0);
+}
+
 .plot-container {
   margin-top: 0px;
   padding: 0px 20px;
@@ -927,4 +932,3 @@ input[type="file"] {
   gap: 12px;
   margin-top: 18px;
 }
-

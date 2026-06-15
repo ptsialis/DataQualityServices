@@ -149,25 +149,34 @@ def process_file(classifier, df):
     return result_df
 
 def load_and_preprocess_data(data_anomalie_df,feature_type_inference):
+    data_anomalie_df = data_anomalie_df.copy()
 
-    if feature_type_inference['prediction'].str.contains('datetime').any():
-    
-        row = feature_type_inference[feature_type_inference['prediction'] == "datetime"]
-        
-        data_anomalie_df = data_anomalie_df.drop([row["Attribute_name"].iloc[0]], axis=1) 
-    
-   
-        # extract a list of ages
-        #col_to_encode = feature_type_inference['Attribute_name'].tolist()
-    onehot_encoder = ce.OneHotEncoder( use_cat_names=True)
-    data_anomalie_df = onehot_encoder.fit_transform(data_anomalie_df)
-    
+    if feature_type_inference is not None and not feature_type_inference.empty:
+        datetime_rows = feature_type_inference[feature_type_inference['prediction'] == "datetime"]
+        datetime_cols = [
+            col for col in datetime_rows["Attribute_name"].astype(str).tolist()
+            if col in data_anomalie_df.columns
+        ]
+        if datetime_cols:
+            data_anomalie_df = data_anomalie_df.drop(columns=datetime_cols)
+
+    categorical_cols = data_anomalie_df.select_dtypes(include=["object", "category", "string", "bool"]).columns.tolist()
+    if categorical_cols:
+        onehot_encoder = ce.OneHotEncoder(cols=categorical_cols, use_cat_names=True)
+        data_anomalie_df = onehot_encoder.fit_transform(data_anomalie_df)
+
+    data_anomalie_df = data_anomalie_df.apply(pd.to_numeric, errors="coerce")
+    for col in data_anomalie_df.columns:
+        if data_anomalie_df[col].isna().all():
+            data_anomalie_df[col] = 0
+        else:
+            data_anomalie_df[col] = data_anomalie_df[col].fillna(data_anomalie_df[col].median())
 
     original_data = data_anomalie_df.copy()
-    
-    if not pd.api.types.is_numeric_dtype(data_anomalie_df.iloc[:, 0]):
-        data_anomalie_df = data_anomalie_df.iloc[:, 1:]
-    
+
+    if data_anomalie_df.empty:
+        data_anomalie_df = pd.DataFrame({"constant": np.zeros(len(original_data), dtype=float)})
+
     scaler = MinMaxScaler()
     normalized_data = pd.DataFrame(scaler.fit_transform(data_anomalie_df), columns=data_anomalie_df.columns)
     
@@ -237,23 +246,63 @@ def detect_anomalies(df, model=IForest(), contamination=0.1, scale_data=True):
     Returns:
     - pd.DataFrame: Original DataFrame with an added 'Anomaly' column (0=normal, 1=anomaly).
     """
-    df_clean = df.select_dtypes(include=['number']).dropna()  # Keep only numerical columns
+    df_model = df.copy()
+
+    datetime_cols = []
+    for col in df_model.columns:
+        if pd.api.types.is_datetime64_any_dtype(df_model[col]):
+            datetime_cols.append(col)
+            continue
+
+        if pd.api.types.is_object_dtype(df_model[col]) or pd.api.types.is_string_dtype(df_model[col]):
+            parsed = pd.to_datetime(df_model[col], errors="coerce")
+            if parsed.notna().mean() >= 0.8:
+                df_model[col] = parsed
+                datetime_cols.append(col)
+
+    for col in datetime_cols:
+        parsed = pd.to_datetime(df_model[col], errors="coerce")
+        df_model[f"{col}_year"] = parsed.dt.year
+        df_model[f"{col}_month"] = parsed.dt.month
+        df_model[f"{col}_day"] = parsed.dt.day
+        df_model[f"{col}_hour"] = parsed.dt.hour
+        df_model = df_model.drop(columns=[col])
+
+    categorical_cols = df_model.select_dtypes(include=["object", "category", "string", "bool"]).columns.tolist()
+    if categorical_cols:
+        encoder = ce.OneHotEncoder(cols=categorical_cols, use_cat_names=True)
+        df_model = encoder.fit_transform(df_model)
+
+    df_model = df_model.apply(pd.to_numeric, errors="coerce")
+
+    for col in df_model.columns:
+        if df_model[col].isna().all():
+            df_model[col] = 0
+        else:
+            df_model[col] = df_model[col].fillna(df_model[col].median())
+
+    df_clean = df_model.select_dtypes(include=['number'])
     if df_clean.empty:
-        raise ValueError("No valid numerical data found for anomaly detection.")
+        df_result = df.copy()
+        df_result["Anomaly"] = 0
+        return df_result, 0
 
     # Scale the data if required
     if scale_data:
         scaler = StandardScaler()
         data = scaler.fit_transform(df_clean)
+    else:
+        data = df_clean.values
    
     # Fit the model and predict anomalies
     model.set_params(contamination=contamination)
     model.fit(data)
-    df_clean["Anomaly"] = model.predict(data)  # 0 = normal, 1 = anomaly
+    df_result = df.copy()
+    df_result["Anomaly"] = model.predict(data)  # 0 = normal, 1 = anomaly
     treshhold = model.threshold_
     
 
-    return df_clean,treshhold
+    return df_result,treshhold
 
 # (weitere Funktionen wie highlight_xxx, extract_metadata, etc. sind unverändert)
 def one_hot_encode_columns(
@@ -568,7 +617,8 @@ def impute_mean_mode(df_to_impute):
             df_to_impute[col].fillna(mean_value, inplace=True)
             imputation_info.append((col, 'Mean', mean_value))
         else:
-            mode_value = df_to_impute[col].mode()[0]
+            mode = df_to_impute[col].mode(dropna=True)
+            mode_value = mode.iloc[0] if not mode.empty else ""
             df_to_impute[col].fillna(mode_value, inplace=True)
             imputation_info.append((col, 'Mode', mode_value))
     return df_to_impute, imputation_info
