@@ -6,6 +6,8 @@ import io
 import os
 import base64
 import random
+import logging
+import time
 from services.session_state import (
     save_dataframe_to_session,
     load_dataframe_from_session,
@@ -13,7 +15,7 @@ from services.session_state import (
     get_workspace_path,
     remove_current_workspace,
 )
-from services.model_manager import get_model, is_model_initialized
+from services.model_manager import get_model, is_model_initialized, is_model_loading
 import src.global_controller as gc
 import src.meta_data_export as md
 import src.summary as sm
@@ -42,6 +44,11 @@ from pathlib import Path
 MAX_COLUMNS_PER_LLM_CALL = 20
 MAX_SAMPLES_PER_COLUMN = 6
 bp = Blueprint('main', __name__)
+logger = logging.getLogger(__name__)
+
+
+class SecurityValidationError(ValueError):
+    """Raised only when the upload security validator rejects a file."""
 
 
 #wandelt DataFrame in Dictionary um
@@ -142,11 +149,39 @@ def df_to_json(df: pd.DataFrame) -> dict:
     """Hilfsfunktion: Wandelt DataFrame in JSON-kompatibles Dict mit columns + data um."""
     if df is None or df.empty:
         return {"columns": [], "data": []}
-    df_clean = df.where(pd.notnull(df), None)
+    df_clean = df.replace([float("inf"), float("-inf")], pd.NA).astype(object)
+    df_clean = df_clean.where(pd.notnull(df_clean), None)
     return {
         "columns": df_clean.columns.tolist(),
         "data": df_clean.to_dict(orient="records")
     }
+
+
+def get_torch_gpu_status() -> dict:
+    try:
+        import torch
+
+        cuda_available = bool(torch.cuda.is_available())
+        device_count = int(torch.cuda.device_count()) if cuda_available else 0
+        device_names = [
+            torch.cuda.get_device_name(index)
+            for index in range(device_count)
+        ]
+
+        return {
+            "torch_available": True,
+            "cuda_available": cuda_available,
+            "device_count": device_count,
+            "device_names": device_names,
+        }
+    except Exception as exc:
+        return {
+            "torch_available": False,
+            "cuda_available": False,
+            "device_count": 0,
+            "device_names": [],
+            "error": str(exc),
+        }
     
     
 
@@ -156,16 +191,22 @@ def status():
     try:
         is_ready = is_model_initialized()
         
+        is_loading = is_model_loading()
+
         if is_ready:
             status_msg = "✓ LLM model is fully loaded and ready!"
             status_val = "ready"
-        else:
-            status_msg = "⏳ LLM model is still loading in the background..."
+        elif is_loading:
+            status_msg = "⏳ LLM model is loading in the background..."
             status_val = "loading"
+        else:
+            status_msg = "LLM model is not loaded. It will load only when an LLM option is used."
+            status_val = "not_loaded"
         
         return jsonify({
             "status": status_val,
             "llm_ready": is_ready,
+            "gpu": get_torch_gpu_status(),
             "message": status_msg,
             "timestamp": datetime.now().isoformat()
         }), 200
@@ -210,7 +251,7 @@ def _load_file_by_format(file) -> tuple[pd.DataFrame, str]:
         
         if not is_valid:
             log_security_event("FILE_VALIDATION_FAILED", file.filename, error_msg)
-            raise ValueError(f"Sicherheitsprüfung fehlgeschlagen: {error_msg}")
+            raise SecurityValidationError(f"Sicherheitsprüfung fehlgeschlagen: {error_msg}")
         
         if warnings:
             log_security_event("FILE_SECURITY_WARNINGS", file.filename, f"{len(warnings)} warnings")
@@ -221,14 +262,17 @@ def _load_file_by_format(file) -> tuple[pd.DataFrame, str]:
         # Try loading with universal handler (now with proper extension)
         df = load_dataset_into_dataframe(temp_path, max_rows=None)
         
-        # Sanitize DataFrame to remove injection attempts
-        df_safe, sanitize_warnings = sanitize_dataframe(df)
+        # Check for spreadsheet formula-injection patterns, but keep the
+        # original values for analysis. Rewriting uploaded data here can change
+        # feature types and prevent the downstream services from producing
+        # results. Escaping should happen when data is exported to CSV.
+        _, sanitize_warnings = sanitize_dataframe(df)
         
         if sanitize_warnings:
-            log_security_event("DATA_SANITIZATION", file.filename, f"{len(sanitize_warnings)} cells sanitized")
-            print(f">>> 🛡️ Sanitized {len(sanitize_warnings)} potentially malicious cells")
+            log_security_event("DATA_SANITIZATION_WARNING", file.filename, f"{len(sanitize_warnings)} cells look like spreadsheet formulas")
+            print(f">>> ⚠ {len(sanitize_warnings)} cells look like spreadsheet formulas; original values kept for analysis")
         
-        return df_safe, ext
+        return df, ext
     finally:
         if os.path.exists(temp_path):
             os.remove(temp_path)
@@ -236,14 +280,24 @@ def _load_file_by_format(file) -> tuple[pd.DataFrame, str]:
 
 @bp.route('/upload', methods=['POST'])
 def upload_data_beginning():
+    upload_started_at = time.perf_counter()
     file = request.files.get('file')
     if not file:
+        logger.warning("upload.rejected reason=no_file")
         return jsonify({"success": False, "error": "Keine Datei hochgeladen."}), 400
 
     try:
         df, file_ext = _load_file_by_format(file)
         df_original = df.copy(deep=True)
-    except ValueError as e:
+        logger.info(
+            "upload.file_loaded filename=%s ext=%s rows=%s cols=%s columns=%s",
+            file.filename,
+            file_ext,
+            df.shape[0],
+            df.shape[1],
+            list(df.columns),
+        )
+    except SecurityValidationError as e:
         # Security validation failed
         log_security_event("UPLOAD_REJECTED", file.filename, str(e))
         return jsonify({
@@ -259,27 +313,39 @@ def upload_data_beginning():
 
     target_variable = request.form.get('target')
     if target_variable not in df.columns:
+        logger.warning(
+            "upload.rejected filename=%s reason=invalid_target target=%s available_columns=%s",
+            file.filename,
+            target_variable,
+            list(df.columns),
+        )
         return jsonify({"success": False, "error": "Bitte Zielvariable auswählen."}), 400
 
     gc.add_metadata("Target variable", target_variable)
-    feature_typ_inference = gc.infer_problem_type(df[target_variable])
+    feature_typ_inference = gc.infer_problem_type(df[target_variable], silent=True)
     gc.add_metadata("User has chosen", feature_typ_inference)
     
     use_llm_feature_type_inference = request.form.get("use_llm_feature_type_inference", "false") == "true"
     use_llm_personal_data_detection = request.form.get("use_llm_personal_data_detection", "false") == "true"
 
-    print(">>> LLM Feature Type Inference:", use_llm_feature_type_inference)
-    print(">>> LLM Personalized Data Detection:", use_llm_personal_data_detection)
+    logger.info(
+        "upload.options filename=%s target=%s target_problem_type=%s llm_feature_type=%s llm_personal=%s",
+        file.filename,
+        target_variable,
+        feature_typ_inference,
+        use_llm_feature_type_inference,
+        use_llm_personal_data_detection,
+    )
 
     model_llm = None
     if use_llm_feature_type_inference or use_llm_personal_data_detection:
         try:
-            print(">>> 🔍 Attempting to get LLM model...")
+            logger.info("upload.llm_model.start filename=%s", file.filename)
             model_llm = get_model()  # This will wait for the model with timeout
-            print(">>> ✓ Successfully obtained global LLM model")
+            logger.info("upload.llm_model.done filename=%s", file.filename)
         except RuntimeError as e:
             error_msg = str(e)
-            print(f">>> ✗ RuntimeError getting model: {error_msg}")
+            logger.warning("upload.llm_model.failed filename=%s error=%s", file.filename, error_msg)
             # If model is not ready, we should retry later
             # Return 503 Service Unavailable to indicate temp failure
             return jsonify({
@@ -290,7 +356,7 @@ def upload_data_beginning():
             }), 503  # 503 Service Unavailable
         except Exception as e:
             error_msg = str(e)
-            print(f">>> ✗ Unexpected error getting model: {type(e).__name__}: {error_msg}")
+            logger.exception("upload.llm_model.error filename=%s", file.filename)
             return jsonify({
                 "success": False, 
                 "error": f"Unexpected error with LLM model: {error_msg}",
@@ -341,6 +407,14 @@ def upload_data_beginning():
             gc.make_prediciton_personal(df_original)
         )
 
+    logger.info(
+        "upload.feature_detection.done filename=%s inference_rows=%s personal_summary_rows=%s personal_detail_rows=%s",
+        file.filename,
+        len(feature_typ_inference) if feature_typ_inference is not None else 0,
+        len(personal_0) if personal_0 is not None else 0,
+        len(personal_1) if personal_1 is not None else 0,
+    )
+
     time_or_tab = gc.check_time_series(
         df,
         feature_typ_inference,
@@ -354,30 +428,60 @@ def upload_data_beginning():
 
 
     imputed_df, _ = gc.impute_mean_mode(df.copy(deep=True))
+    logger.info(
+        "upload.imputation.done filename=%s missing_before=%s missing_after=%s",
+        file.filename,
+        int(df.isna().sum().sum()),
+        int(imputed_df.isna().sum().sum()),
+    )
 
 
     if time_or_tab == "Tabular":
-        df_anomalies, threshold = gc.detect_anomalies(df)
+        anomaly_started_at = time.perf_counter()
+        df_anomalies, threshold = gc.detect_anomalies(imputed_df)
+        logger.info(
+            "upload.anomaly.done filename=%s mode=tabular rows=%s anomalies=%s threshold=%s elapsed_ms=%.1f",
+            file.filename,
+            len(df_anomalies),
+            int((df_anomalies["Anomaly"] == 1).sum()) if "Anomaly" in df_anomalies else 0,
+            threshold,
+            (time.perf_counter() - anomaly_started_at) * 1000,
+        )
     else:
-        _, normalized_data, feats = gc.load_and_preprocess_data(df, feature_typ_inference)
+        anomaly_started_at = time.perf_counter()
+        _, normalized_data, feats = gc.load_and_preprocess_data(imputed_df, feature_typ_inference)
+        logger.info(
+            "upload.anomaly.preprocessing_done filename=%s mode=time_series rows=%s feats=%s",
+            file.filename,
+            len(normalized_data),
+            feats,
+        )
         anomalies, _, _, threshold = gc.detect_anomalies_tranad(normalized_data, feats, 95)
-        df_anomalies = df.copy()
+        df_anomalies = imputed_df.copy()
         df_anomalies["Anomaly"] = anomalies
+        logger.info(
+            "upload.anomaly.done filename=%s mode=time_series rows=%s anomalies=%s threshold=%s elapsed_ms=%.1f",
+            file.filename,
+            len(df_anomalies),
+            int((df_anomalies["Anomaly"] == 1).sum()),
+            threshold,
+            (time.perf_counter() - anomaly_started_at) * 1000,
+        )
 
     # Serialize DataFrame with LLM-optimized format if LLM is being used
     serialized_data = None
     if use_llm_feature_type_inference or use_llm_personal_data_detection:
         try:
-            print(">>> 📦 Serializing data with LLM-optimized format...")
+            logger.info("upload.llm_serialization.start filename=%s", file.filename)
             serialized_data = serialize_df_for_llm(
                 df_original,
                 max_rows=50,
                 include_markdown=True,
                 include_html=True
             )
-            print(">>> ✓ Data serialized successfully")
+            logger.info("upload.llm_serialization.done filename=%s", file.filename)
         except Exception as e:
-            print(f">>> ⚠ Warning: Serialization failed: {e}")
+            logger.warning("upload.llm_serialization.failed filename=%s error=%s", file.filename, e)
             # Don't fail the upload, just continue without serialized data
 
     session["data"] = {
@@ -397,6 +501,13 @@ def upload_data_beginning():
     save_dataframe_to_session("inference", feature_typ_inference[["prediction","Attribute_name"]])
     save_dataframe_to_session("personal_0", personal_0)
     save_dataframe_to_session("personal_1", personal_1)
+    logger.info(
+        "upload.session_saved filename=%s original_rows=%s imputed_rows=%s anomaly_rows=%s",
+        file.filename,
+        len(df_original),
+        len(imputed_df),
+        len(df_anomalies),
+    )
 
     if serialized_data:
         serialized_path = get_session_file_path(
@@ -420,6 +531,11 @@ def upload_data_beginning():
     session["intermediate_process"] = True
     
     session.modified = True
+    logger.info(
+        "upload.done filename=%s elapsed_ms=%.1f",
+        file.filename,
+        (time.perf_counter() - upload_started_at) * 1000,
+    )
 
     return jsonify({
         "success": True,
@@ -430,6 +546,7 @@ def upload_data_beginning():
 @bp.route('/original')
 def show_orig_data():
     df = load_dataframe_from_session("original")
+    logger.info("view.original rows=%s cols=%s", df.shape[0], df.shape[1])
     desc = sm.describe_dataframe(df)
     fig = plts.plot_boxplots(df)
 
@@ -514,6 +631,12 @@ def show_imputation():
     original = load_dataframe_from_session("original")
     imputed = load_dataframe_from_session("impute")
     inference = load_dataframe_from_session("inference")
+    logger.info(
+        "view.imputation original_rows=%s imputed_rows=%s inference_rows=%s",
+        len(original),
+        len(imputed),
+        len(inference),
+    )
 
     explanation_fig = sm.explanation_imputation(original, inference)
     try:
@@ -536,6 +659,13 @@ def show_anomalies():
     df = load_dataframe_from_session("anomaly")
     threshold = session.get("data", {}).get("threshold", 0)
     time_or_tab = session.get("data", {}).get("time_or_tab", "")
+    logger.info(
+        "view.anomaly rows=%s anomalies=%s time_or_tab=%s threshold=%s",
+        len(df),
+        int((df["Anomaly"] == 1).sum()) if "Anomaly" in df else 0,
+        time_or_tab,
+        threshold,
+    )
 
     explanation_fig = sm.explanation_anomaly(threshold, time_or_tab)
 
@@ -615,16 +745,17 @@ def show_summary():
     inference = load_dataframe_from_session("inference")
     anomaly = load_dataframe_from_session("anomaly")
     original = load_dataframe_from_session("original")
+    imputed = load_dataframe_from_session("impute")
     personal_0 = load_dataframe_from_session("personal_0")
 
     plots = {
         "inference": plts.plot_inference_bar(inference).to_plotly_json(),
         "anomaly": plts.plot_anomaly_pie(anomaly).to_plotly_json(),
-        "imputation": plts.plot_imputation_bar(original, inference).to_plotly_json(),
+        "imputation": plts.plot_imputation_pie(original, imputed).to_plotly_json(),
         "personal": plts.plot_personal_pie(personal_0).to_plotly_json()
     }
 
-    return Response(json.dumps(plots, default=str), mimetype='application/json')
+    return Response(json.dumps(plots, cls=PlotlyJSONEncoder), mimetype='application/json')
 
 
 @bp.route("/detectedCounts")
@@ -683,9 +814,6 @@ def show_clean_data():
     original_df = load_dataframe_from_session("original")
     imputed = load_dataframe_from_session("impute")
     inference = load_dataframe_from_session("inference")
-    anomaly = load_dataframe_from_session("anomaly")
-    personal_1 = load_dataframe_from_session("personal_1")
-
     target = session.get("data", {}).get("target_variable", None)
 
     if imputed is None or imputed.empty:
@@ -705,15 +833,21 @@ def show_clean_data():
     final_df = gc.one_hot_encode_columns(
         imputed,
         inference,
-        df_anomalies=anomaly,
-        df_personal=personal_1,
         target_col=target,
+    )
+
+    logger.info(
+        "view.cleaned original_shape=%s processed_shape=%s final_shape=%s target=%s",
+        original_df.shape,
+        imputed.shape,
+        final_df.shape,
+        target,
     )
     
     original_df.to_csv(
-    get_session_file_path("exports", "original_df.csv"),
-    index=False,
-)
+        get_session_file_path("exports", "original_df.csv"),
+        index=False,
+    )
 
     final_df.to_csv(
         get_session_file_path("exports", "final_df.csv"),
@@ -723,6 +857,7 @@ def show_clean_data():
     return Response(
         json.dumps({
             "original": df_to_json(original_df),
+            "processed": df_to_json(imputed),
             "final": df_to_json(final_df)
         }, default=str),
         mimetype='application/json'
@@ -1132,33 +1267,16 @@ def download_zip():
 
     if "cleaned_data.csv" in selected:
         try:
-            if "anomalies.json" in selected and "personal_data.json" not in selected:
-                cleaned_df = gc.one_hot_encode_columns(
-                    imputed, inference,
-                    df_anomalies=anomaly,
-                    target_col=target
-                )
+            if imputed is None or imputed.empty:
+                raise ValueError("Missing imputed dataframe")
+            if inference is None or inference.empty:
+                raise ValueError("Missing inference dataframe")
 
-            elif "anomalies.json" not in selected and "personal_data.json" in selected:
-                cleaned_df = gc.one_hot_encode_columns(
-                    imputed, inference,
-                    df_personal=personal_1,
-                    target_col=target
-                )
-
-            elif "anomalies.json" in selected and "personal_data.json" in selected:
-                cleaned_df = gc.one_hot_encode_columns(
-                    imputed, inference,
-                    df_anomalies=anomaly,
-                    df_personal=personal_1,
-                    target_col=target
-                )
-
-            else:
-                cleaned_df = gc.one_hot_encode_columns(
-                    imputed, inference,
-                    target_col=target
-                )
+            cleaned_df = gc.one_hot_encode_columns(
+                imputed,
+                inference,
+                target_col=target,
+            )
 
             #CSV vorbereiten um in ZIP geschrieben zu werden
             cleaned_csv_bytes = cleaned_df.to_csv(index=False).encode("utf-8")

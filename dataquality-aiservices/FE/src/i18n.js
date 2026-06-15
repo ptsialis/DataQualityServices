@@ -49,6 +49,19 @@ const resources = {
       histograms: 'Histograms',
       correlationMatrix: 'Correlation Matrix',
       featureImportance: 'Feature Importance'
+      ,
+      summaryInferenceTitle: "Feature Type Inference",
+      summaryAnomalyTitle: "Anomaly Distribution",
+      summaryPersonalTitle: "Personal Data Distribution",
+      summaryImputationTitle: "Imputed Values",
+      featureType: "Feature Type",
+      count: "Count",
+      anomalyLabel: "Anomaly",
+      noAnomalyLabel: "No Anomaly",
+      personalFeaturesLabel: "Personal Features",
+      nonPersonalFeaturesLabel: "Non-Personal Features",
+      imputedValuesLabel: "Imputed Values",
+      notImputedValuesLabel: "Not Imputed Values"
 
 
     }
@@ -100,6 +113,19 @@ const resources = {
       histograms: "Histogramme",
       correlationMatrix: "Korrelationsmatrix",
       featureImportance: "Feature Importance"
+      ,
+      summaryInferenceTitle: "Merkmalstyp-Erkennung",
+      summaryAnomalyTitle: "Anomalie-Verteilung",
+      summaryPersonalTitle: "Verteilung persönlicher Daten",
+      summaryImputationTitle: "Imputierte Werte",
+      featureType: "Merkmalstyp",
+      count: "Anzahl",
+      anomalyLabel: "Anomalie",
+      noAnomalyLabel: "Keine Anomalie",
+      personalFeaturesLabel: "Persönliche Merkmale",
+      nonPersonalFeaturesLabel: "Nicht-persönliche Merkmale",
+      imputedValuesLabel: "Imputierte Werte",
+      notImputedValuesLabel: "Nicht imputierte Werte"
 
     }
   }

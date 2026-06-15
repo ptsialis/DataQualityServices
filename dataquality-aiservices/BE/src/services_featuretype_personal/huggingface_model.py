@@ -20,81 +20,141 @@ import torch
 logger = logging.getLogger(__name__)
 
 
-def load_model(model = "", quantization='4bit'):
+def load_model(model: str = "", quantization: str = "4bit"):
     """
-    Load a causal language model + tokenizer from Hugging Face and wrap it in a
-    text-generation pipeline, optionally using bitsandbytes quantization.
+    Load a causal language model and tokenizer from Hugging Face and wrap them
+    in a text-generation pipeline.
+
+    Quantization behavior:
+        - "8bit": Use bitsandbytes 8-bit quantization when CUDA is available.
+        - "4bit": Use bitsandbytes 4-bit quantization when CUDA is available.
+        - "16bit": Load with float16 weights when CUDA is available.
+        - "": Load without quantization.
+
+    CPU fallback:
+        On systems without a CUDA GPU, such as a Mac Docker container,
+        bitsandbytes quantization is disabled automatically and the model is
+        loaded on the CPU using float32 weights.
 
     Args:
-        model (str): Hugging Face model id or local path (e.g., "microsoft/Phi-4").
-        quantization (str): One of {"8bit", "4bit", "16bit", ""}.
-            - "8bit": load_in_8bit via BitsAndBytesConfig
-            - "4bit": load_in_4bit via BitsAndBytesConfig (compute in bfloat16)
-            - "16bit": placeholder path here (uses BitsAndBytesConfig as written)
-            - "": no quantization (full-precision weights)
+        model: Hugging Face model ID or local path.
+        quantization: One of {"8bit", "4bit", "16bit", ""}.
 
     Returns:
-        transformers.Pipeline: A text-generation pipeline using the loaded model/tokenizer.
+        transformers.Pipeline: Text-generation pipeline.
     """
     try:
-        from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig, pipeline
+        import torch
+        from transformers import (
+            AutoModelForCausalLM,
+            AutoTokenizer,
+            BitsAndBytesConfig,
+            pipeline,
+        )
     except ImportError as exc:
         raise ImportError(
-            "Failed to import transformers. Ensure compatible versions of transformers and huggingface_hub are installed."
+            "Failed to import the required model libraries. Ensure that "
+            "torch, transformers and huggingface_hub are installed."
         ) from exc
 
-    # Load tokenizer first; ensure a pad token id exists to avoid generation warnings.
+    valid_quantization_modes = {"8bit", "4bit", "16bit", ""}
+
+    if quantization not in valid_quantization_modes:
+        raise ValueError(
+            f"Unsupported quantization mode: {quantization!r}. "
+            f"Choose one of {sorted(valid_quantization_modes)!r}."
+        )
+
+    cuda_available = torch.cuda.is_available()
+
+    logger.info("Loading model: %s", model)
+    logger.info("CUDA available: %s", cuda_available)
+    logger.info("Requested quantization mode: %s", quantization or "none")
+
     tokenizer = AutoTokenizer.from_pretrained(model)
-    tokenizer.pad_token_id = tokenizer.eos_token_id  # disable terminal warning about missing pad token
 
-    # Build a bitsandbytes quantization config depending on the requested mode.
-    # (Requires bitsandbytes + compatible GPU for 8/4-bit.)
-    if quantization == '8bit':
-        quant_config = BitsAndBytesConfig(
-            load_in_8bit=True,
-        )
-    elif quantization == '4bit':
-        quant_config = BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_compute_dtype=torch.bfloat16  # compute in bfloat16 for speed/accuracy tradeoff
-        )
-    elif quantization == '16bit':
-        # Note: This path assumes BitsAndBytesConfig supports 16-bit flag as used below.
-        # Some setups prefer torch_dtype=torch.float16 on from_pretrained instead.
-        quant_config = BitsAndBytesConfig(load_in_16bit=True)
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
 
-    # Load model weights. If a quantization mode was chosen, pass the quant config;
-    # otherwise load the model without quantization. device_map="auto" spreads layers across available devices.
-    def _load_model(device_map):
-        if not quantization == "":
-            return AutoModelForCausalLM.from_pretrained(
-                model,
-                quantization_config=quant_config,
-                device_map=device_map,
+    def _load_model(
+        device_map: str,
+        selected_quantization: str,
+    ):
+        model_kwargs = {
+            "device_map": device_map,
+        }
+
+        if selected_quantization == "8bit":
+            model_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_8bit=True,
             )
+
+        elif selected_quantization == "4bit":
+            model_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=True,
+                bnb_4bit_compute_dtype=torch.bfloat16,
+            )
+
+        elif selected_quantization == "16bit":
+            model_kwargs["torch_dtype"] = torch.float16
+
+        else:
+            # CPU loading should use float32 for broad compatibility.
+            model_kwargs["torch_dtype"] = torch.float32
+
         return AutoModelForCausalLM.from_pretrained(
             model,
-            device_map=device_map,
+            **model_kwargs,
         )
 
-    device_map = 'auto' if torch.cuda.is_available() else 'cpu'
+    if cuda_available:
+        device_map = "auto"
+        effective_quantization = quantization
+    else:
+        device_map = "cpu"
+
+        if quantization in {"4bit", "8bit"}:
+            logger.warning(
+                "CUDA is unavailable. Disabling bitsandbytes %s quantization "
+                "and loading the model on the CPU with float32 weights.",
+                quantization,
+            )
+
+        elif quantization == "16bit":
+            logger.warning(
+                "CUDA is unavailable. Disabling float16 loading and loading "
+                "the model on the CPU with float32 weights."
+            )
+
+        effective_quantization = ""
+
     try:
-        llm_model = _load_model(device_map)
+        llm_model = _load_model(
+            device_map=device_map,
+            selected_quantization=effective_quantization,
+        )
+
     except RuntimeError as exc:
-        if torch.cuda.is_available() and 'out of memory' in str(exc).lower():
-            logger.warning("CUDA out of memory while loading model; retrying on CPU.")
+        if cuda_available and "out of memory" in str(exc).lower():
+            logger.warning(
+                "CUDA ran out of memory while loading the model. "
+                "Retrying on the CPU without quantization."
+            )
+
             torch.cuda.empty_cache()
-            llm_model = _load_model('cpu')
+
+            llm_model = _load_model(
+                device_map="cpu",
+                selected_quantization="",
+            )
         else:
             raise
 
-    # Wrap into a text-generation pipeline for easy .__call__(...) usage.
-    pipe = pipeline(
+    return pipeline(
         "text-generation",
         model=llm_model,
         tokenizer=tokenizer,
     )
-    return pipe
 
 
 # def load_model(model_name="deepseek-ai/DeepSeek-R1-Distill-Llama-8B", quantization=""):

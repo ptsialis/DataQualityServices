@@ -12,6 +12,9 @@ from sklearn.preprocessing import LabelEncoder
 
 
 def plot_inference_bar(plot_inference_df):
+    if plot_inference_df is None or plot_inference_df.empty or "prediction" not in plot_inference_df.columns:
+        return go.Figure()
+
     # Count occurrences of each prediction type
     prediction_counts = plot_inference_df['prediction'].value_counts().reset_index()
     prediction_counts.columns = ['prediction', 'count']
@@ -21,66 +24,39 @@ def plot_inference_bar(plot_inference_df):
         prediction_counts, 
         x='prediction', 
         y='count', 
-        title='Distribution of Feature Types',
+        title='',
         labels={'prediction': 'Feature Type', 'count': 'Count'},
         color='prediction'
     )
 
     return fig
 
-def plot_imputation_bar(df, feature_df):
-    # Identify columns with NaN values
-    nan_columns = [col for col in df.columns if df[col].isna().any()]
+def plot_imputation_pie(original_df, imputed_df):
+    if original_df is None or original_df.empty:
+        return go.Figure()
 
-    # Sicherstellen, dass mindestens eine NaN-Spalte existiert
-    if len(nan_columns) >= 2:
-        column_to_plot = nan_columns[1]
-    elif len(nan_columns) == 1:
-        column_to_plot = nan_columns[0]
+    total_values = int(original_df.size)
+    if imputed_df is None or imputed_df.empty:
+        imputed_values = 0
     else:
-        # Notfallauswahl: erste nicht-leere Spalte
-        fallback_cols = [col for col in df.columns if not df[col].dropna().empty]
-        if not fallback_cols:
-            raise ValueError("Keine geeignete Spalte zum Plotten gefunden.")
-        column_to_plot = fallback_cols[0]
+        aligned_imputed = imputed_df.reindex_like(original_df)
+        imputed_values = int((original_df.isna() & aligned_imputed.notna()).sum().sum())
 
-    # Drop NaN values for plotting
-    data = df[column_to_plot].dropna()
+    not_imputed_values = max(total_values - imputed_values, 0)
 
-    if data.empty:
-        raise ValueError(f"No valid data to plot for column: {column_to_plot}")
-
-    row_pt = feature_df[feature_df['Attribute_name'] == column_to_plot]
-
-    if row_pt.empty:
-        raise ValueError(f"Keine Feature-Information für Spalte '{column_to_plot}' gefunden.")
-
-    # Determine if the column is categorical or numerical
-    if row_pt["prediction"].iloc[0] == 'categorical':
-        ref_value = data.mode()[0]
-        is_categorical = True
-    else:
-        ref_value = data.median()
-        is_categorical = False
-
-    fig = px.histogram(data, x=column_to_plot, title=f'Imputation of {column_to_plot}')
-
-    if not is_categorical:
-        fig.add_vline(x=ref_value, line_dash="dash", line_color="red", annotation_text=f"Median: {ref_value}")
-    else:
-        fig.add_annotation(
-            text=f"Mode: {ref_value}",
-            x=ref_value,
-            y=data.value_counts().max(),
-            showarrow=True,
-            arrowhead=2,
-            arrowcolor="red"
-        )
+    fig = px.pie(
+        names=["Imputed Values", "Not Imputed Values"],
+        values=[imputed_values, not_imputed_values],
+        title="",
+        color_discrete_sequence=['#bf91e5', '#dfc7eb']
+    )
 
     return fig
 
 
 def plot_personal_pie(plot_personal_df):
+    if plot_personal_df is None or plot_personal_df.empty:
+        return go.Figure()
     
     personal_features = plot_personal_df["Personal Features"].iloc[0]
     non_personal_features = plot_personal_df['Non-Personal Features'].iloc[0]
@@ -88,13 +64,16 @@ def plot_personal_pie(plot_personal_df):
     fig = px.pie(
         names=["Personal Features", "Non-Personal Features"],
         values=[personal_features, non_personal_features],
-        title='Distribution of Personal Data',
+        title='',
         labels={"Personal Features": "Personal Features", "Non-Personal Features": "Non-Personal Features"}
     )
     
     return fig
 
 def plot_anomaly_pie(plot_anomaly_df):
+    if plot_anomaly_df is None or plot_anomaly_df.empty or "Anomaly" not in plot_anomaly_df.columns:
+        return go.Figure()
+
     anomaly_counts = plot_anomaly_df['Anomaly'].value_counts()
 
     # Define custom labels
@@ -105,7 +84,7 @@ def plot_anomaly_pie(plot_anomaly_df):
     fig = px.pie(
         values=anomaly_counts, 
         names=labeled_index, 
-        title="Anomaly Distribution",
+        title="",
         color_discrete_sequence=['lightcoral', 'lightskyblue']
     )
     return fig
@@ -123,8 +102,16 @@ def plot_randomforest_trees(df_randomforest_plot,target_variable):
     return fig_rf
 
 def plot_boxplots(df):
+    if df is None or df.empty:
+        return go.Figure()
 
-    fig = px.box(df.melt(var_name="Feature", value_name="Value"), x="Feature", y="Value")
+    num_df = df.select_dtypes(include="number")
+    if num_df.empty:
+        fig = go.Figure()
+        fig.update_layout(title="No numeric columns available for boxplots")
+        return fig
+
+    fig = px.box(num_df.melt(var_name="Feature", value_name="Value"), x="Feature", y="Value")
 
     return fig
 
@@ -175,6 +162,16 @@ def plot_feature_importance(df_encoded: pd.DataFrame, target: str, top_n: int = 
     if X.empty or y is None or y.dropna().empty:
         return None
 
+    categorical_cols = X.select_dtypes(include=["object", "category", "string", "bool"]).columns.tolist()
+    if categorical_cols:
+        X = pd.get_dummies(X, columns=categorical_cols, dummy_na=True)
+
+    X = X.apply(pd.to_numeric, errors="coerce")
+    X = X.fillna(0)
+
+    if X.empty:
+        return None
+
     y_is_numeric = pd.api.types.is_numeric_dtype(y)
     unique_count = y.nunique(dropna=True)
 
@@ -211,6 +208,3 @@ def plot_feature_importance(df_encoded: pd.DataFrame, target: str, top_n: int = 
     fig.update_traces(texttemplate="%{text:.3f}", textposition="outside")
     fig.update_layout(width=900, height=650, title_x=0.5, yaxis={"categoryorder": "total ascending"})
     return fig
-
-
-

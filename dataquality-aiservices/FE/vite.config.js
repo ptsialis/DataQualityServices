@@ -12,15 +12,20 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/upload': backendTarget,
+      '/status': backendTarget,
       '/original': backendTarget,
+      '/datagraphs': backendTarget,
       '/inference': backendTarget,
       '/imputation': backendTarget,
       '/anomaly': backendTarget,
       '/personal': backendTarget,
       '/metadata': backendTarget,
       '/summary': backendTarget,
+      '/detectedCounts': backendTarget,
       '/model': backendTarget,
-      '/cleaned': backendTarget
+      '/cleaned': backendTarget,
+      '/downloadZip': backendTarget,
+      '/reset': backendTarget
     }
   }
 });

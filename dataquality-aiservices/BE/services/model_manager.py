@@ -2,8 +2,8 @@
 Global LLM Model Manager
 
 This module manages a singleton instance of the LLM model,
-ensuring it is loaded only once at application startup and
-reused throughout the entire application lifecycle.
+ensuring it is loaded only once on demand and reused throughout
+the entire application lifecycle.
 """
 
 import logging
@@ -24,7 +24,7 @@ def initialize_model(model_name: str = "Qwen/Qwen3-4B-Instruct-2507-FP8", quanti
     Initialize the global LLM model instance in a background thread.
     
     This function returns immediately and starts loading the model asynchronously.
-    The Flask app continues to accept requests while the model loads in the background.
+    It should be called only when an LLM-backed feature is requested.
     
     Args:
         model_name (str): HuggingFace model identifier (default: "Qwen/Qwen3-4B-Instruct-2507-FP8")
@@ -42,13 +42,14 @@ def initialize_model(model_name: str = "Qwen/Qwen3-4B-Instruct-2507-FP8", quanti
             logger.info("⏳ Model loading already in progress, skipping duplicate initialization")
             return
         
+        _model_ready.clear()
         _model_loading = True
     
     logger.info(f"🚀 Starting background model loading thread for {model_name}...")
     
     # Start loading in background thread
     def _load_model_background():
-        global _model_instance
+        global _model_instance, _model_loading
         try:
             logger.info(f"🔄 Background thread: Initializing LLM model: {model_name}")
             logger.info(f"🔄 Background thread: Quantization mode: {quantization}")
@@ -65,19 +66,24 @@ def initialize_model(model_name: str = "Qwen/Qwen3-4B-Instruct-2507-FP8", quanti
             
             logger.info("✓ ✓ ✓ LLM model successfully loaded and ready for use! ✓ ✓ ✓")
             _model_ready.set()
+            with _model_lock:
+                _model_loading = False
             
         except ImportError as e:
             logger.error(f"✗ Import error during model loading: {str(e)}")
             logger.error(f"  Make sure src/services_featuretype_personal/huggingface_model.py exists")
             _model_ready.set()
+            with _model_lock:
+                _model_loading = False
         except Exception as e:
             logger.error(f"✗ Exception during model loading: {type(e).__name__}: {str(e)}")
             import traceback
             logger.error(traceback.format_exc())
             _model_ready.set()
+            with _model_lock:
+                _model_loading = False
     
-    # Start thread with daemon=False so it continues even if main thread exits
-    thread = threading.Thread(target=_load_model_background, daemon=False, name="LLMModelLoader")
+    thread = threading.Thread(target=_load_model_background, daemon=True, name="LLMModelLoader")
     thread.start()
     logger.info("✓ Background thread started successfully")
 
@@ -104,6 +110,13 @@ def get_model(wait_timeout: int = 600):
         logger.info("✓ Returning already-loaded model instance")
         return _model_instance
     
+    # Start lazy loading on first use. Normal uploads never call this unless
+    # an LLM option is enabled.
+    initialize_model(
+        model_name="Qwen/Qwen3-4B",
+        quantization="4bit",
+    )
+
     # Wait for model to be ready (with timeout)
     logger.info(f"⏳ Waiting for model to load (timeout: {wait_timeout}s)...")
     if not _model_ready.wait(timeout=wait_timeout):
@@ -134,6 +147,14 @@ def is_model_initialized() -> bool:
     """
     global _model_instance
     return _model_instance is not None
+
+
+def is_model_loading() -> bool:
+    """
+    Check if the LLM model is currently loading in the background.
+    """
+    global _model_loading
+    return _model_loading
 
 
 def reset_model():

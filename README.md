@@ -54,6 +54,23 @@ View the Main UI at:
 http://localhost:8000
 ```
 
+### Linux/NVIDIA GPU for DataQuality
+
+The default DataQuality compose file remains macOS-friendly. On Linux hosts with NVIDIA GPUs, install the NVIDIA driver and NVIDIA Container Toolkit, verify `nvidia-smi` on the host, then start the DataQuality backend with the GPU override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
+
+For the nested DataQuality-only stack:
+
+```bash
+cd dataquality-aiservices
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
+
+Check `http://localhost:8503/status`; the response includes `gpu.cuda_available` and detected GPU names when the backend container can access NVIDIA.
+
 ---
 
 ## AI Services Overview

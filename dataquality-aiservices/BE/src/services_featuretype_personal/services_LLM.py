@@ -9,6 +9,7 @@ from tqdm import tqdm
 import re
 import warnings
 import pickle
+from pathlib import Path
 import joblib
 
 warnings.filterwarnings("ignore")
@@ -805,20 +806,35 @@ def generate_fewshot_examples(class_prompt, dataset, indexes, binary=False):
     return prompt
 
 
-def Load_RF(df, rf_Filename="data/models/RandomForest.pkl"):
+def Load_RF(
+    df,
+    rf_Filename: str | Path | None = None,
+):
     """
-    Load a pickled RandomForest model from `rf_Filename` and predict on `df`.
-    Returns the predictions as a list.
-    """
-    with open(rf_Filename, 'rb') as file:
-        Pickled_LR_Model = pickle.load(file)  # load the sklearn model
+    Load the pickled RandomForest model and return predictions as a list.
 
-    y_RF = Pickled_LR_Model.predict(df).tolist()
-    return y_RF
+    The default path is resolved relative to this Python file, so it works
+    independently of the current working directory and operating system.
+    """
+    if rf_Filename is None:
+        backend_root = Path(__file__).resolve().parents[2]
+        rf_path = backend_root / "data" / "models" / "RandomForest.pkl"
+    else:
+        rf_path = Path(rf_Filename).expanduser().resolve()
+
+    if not rf_path.is_file():
+        raise FileNotFoundError(
+            f"RandomForest model not found at: {rf_path}"
+        )
+
+    with rf_path.open("rb") as file:
+        pickled_rf_model = pickle.load(file)
+
+    return pickled_rf_model.predict(df).tolist()
 
 
 def FeatureExtraction(data, useSamples=0):
-    """
+    """‚
     Construct a feature matrix for classical ML from `data` by:
       - Selecting numeric/statistical feature columns
       - Vectorizing 'Attribute_name' using a prefit dictionary

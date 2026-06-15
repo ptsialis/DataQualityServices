@@ -3,16 +3,26 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn.base")
 
 import os
 import logging
-from flask import Flask
+import sys
+import time
+from flask import Flask, g, request
 from flask_session import Session
 from flask_cors import CORS
 from routes.main_routes import bp as main_bp
 from services.session_state import init_session_state
-from services.model_manager import initialize_model
 
 
-logging.basicConfig(level=logging.INFO)
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(
+    level=getattr(logging, LOG_LEVEL, logging.INFO),
+    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
+    stream=sys.stdout,
+    force=True,
+)
 logger = logging.getLogger(__name__)
+logging.getLogger("werkzeug").addFilter(
+    lambda record: "GET /status " not in record.getMessage()
+)
 
 
 def create_app():
@@ -81,39 +91,35 @@ def create_app():
 
     @app.before_request
     def before_request():
+        g.request_started_at = time.perf_counter()
         init_session_state()
+        if request.path != "/status":
+            logger.info("request.start method=%s path=%s", request.method, request.path)
 
-    # --------------------------------------------------------------
-    # Background LLM loading
-    #
-    # Important:
-    # Keep one application worker until the LLM is moved into a
-    # dedicated inference service or GPU worker.
-    # --------------------------------------------------------------
-    try:
-        logger.info("")
-        logger.info("=" * 70)
-        logger.info("🚀 APPLICATION STARTUP - INITIALIZING LLM MODEL")
-        logger.info("=" * 70)
+    @app.after_request
+    def after_request(response):
+        if request.path != "/status":
+            elapsed_ms = (time.perf_counter() - getattr(g, "request_started_at", time.perf_counter())) * 1000
+            logger.info(
+                "request.end method=%s path=%s status=%s elapsed_ms=%.1f",
+                request.method,
+                request.path,
+                response.status_code,
+                elapsed_ms,
+            )
+        return response
 
-        initialize_model(
-            model_name="Qwen/Qwen3-4B",
-            quantization="4bit",
-        )
+    @app.teardown_request
+    def teardown_request(exc):
+        if exc is not None:
+            logger.error(
+                "request.error method=%s path=%s",
+                request.method,
+                request.path,
+                exc_info=(type(exc), exc, exc.__traceback__),
+            )
 
-        logger.info("=" * 70)
-        logger.info("✓ Flask is ready to accept requests!")
-        logger.info("⏳ LLM model is loading in the background...")
-        logger.info("=" * 70)
-        logger.info("")
-
-    except Exception as exc:
-        logger.error("=" * 70)
-        logger.error(f"✗ Error during model initialization startup: {exc}")
-        logger.error("=" * 70)
-
-        import traceback
-        logger.error(traceback.format_exc())
+    logger.info("Flask is ready. LLM model loading is lazy and starts only when an LLM option is used.")
 
     return app
 
